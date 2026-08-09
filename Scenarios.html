@@ -1,0 +1,1173 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Stateless Decoupler - Technical Documentation</title>
+        <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+
+            body {
+                font-family: "Courier New", Courier, monospace;
+                background: #000000;
+                color: #ffffff;
+                padding: 40px 20px;
+                line-height: 1.6;
+            }
+
+            .container {
+                max-width: 1000px;
+                margin: 0 auto;
+            }
+
+            /* Header */
+            .header {
+                border: 1px solid #ffffff;
+                padding: 30px 40px;
+                margin-bottom: 30px;
+                text-align: center;
+            }
+
+            .header h1 {
+                font-size: 32px;
+                font-weight: 700;
+                letter-spacing: 2px;
+                margin-bottom: 8px;
+            }
+
+            .header .subtitle {
+                font-size: 16px;
+                color: #aaaaaa;
+                letter-spacing: 1px;
+            }
+
+            .header .meta {
+                margin-top: 15px;
+                font-size: 13px;
+                color: #888888;
+                border-top: 1px solid #333333;
+                padding-top: 15px;
+            }
+
+            .header .meta span {
+                margin: 0 15px;
+            }
+
+            .status-badge {
+                display: inline-block;
+                border: 1px solid #00ff00;
+                color: #00ff00;
+                padding: 4px 16px;
+                font-size: 12px;
+                letter-spacing: 1px;
+                margin-top: 10px;
+            }
+
+            /* Image Section */
+            .image-section {
+                border: 1px solid #333333;
+                padding: 30px;
+                margin-bottom: 30px;
+                text-align: center;
+            }
+
+            .image-section img {
+                max-width: 100%;
+                height: auto;
+                border: 1px solid #444444;
+            }
+
+            .image-caption {
+                margin-top: 12px;
+                font-size: 13px;
+                color: #888888;
+                letter-spacing: 0.5px;
+            }
+
+            /* Section */
+            .section {
+                border: 1px solid #333333;
+                padding: 30px 35px;
+                margin-bottom: 25px;
+            }
+
+            .section-title {
+                font-size: 22px;
+                font-weight: 700;
+                letter-spacing: 1px;
+                margin-bottom: 20px;
+                border-bottom: 1px solid #333333;
+                padding-bottom: 12px;
+            }
+
+            .section-title .number {
+                color: #888888;
+                margin-right: 10px;
+            }
+
+            /* Sub-section */
+            .sub-section {
+                margin: 20px 0;
+                padding-left: 20px;
+                border-left: 2px solid #444444;
+            }
+
+            .sub-section-title {
+                font-size: 16px;
+                font-weight: 600;
+                color: #cccccc;
+                margin-bottom: 10px;
+            }
+
+            /* Text content */
+            p {
+                margin-bottom: 12px;
+                font-size: 14px;
+                color: #dddddd;
+            }
+
+            .highlight-box {
+                border: 1px solid #444444;
+                padding: 15px 20px;
+                margin: 15px 0;
+                background: #0a0a0a;
+            }
+
+            .highlight-box .label {
+                color: #888888;
+                font-size: 12px;
+                letter-spacing: 1px;
+                text-transform: uppercase;
+                margin-bottom: 8px;
+            }
+
+            .highlight-box .content {
+                font-size: 14px;
+                color: #ffffff;
+            }
+
+            /* Lists */
+            ul,
+            ol {
+                padding-left: 25px;
+                margin: 10px 0 15px 0;
+                font-size: 14px;
+                color: #dddddd;
+            }
+
+            li {
+                margin-bottom: 6px;
+            }
+
+            /* Code blocks */
+            .code-block {
+                background: #0a0a0a;
+                border: 1px solid #333333;
+                padding: 15px 20px;
+                font-family: "Courier New", Courier, monospace;
+                font-size: 13px;
+                color: #cccccc;
+                margin: 12px 0;
+                overflow-x: auto;
+                white-space: pre-wrap;
+                word-break: break-all;
+            }
+
+            .code-block .comment {
+                color: #666666;
+            }
+
+            .code-block .highlight {
+                color: #00ff88;
+            }
+
+            /* Arrow indicators */
+            .arrow-line {
+                color: #666666;
+                font-size: 13px;
+                margin: 5px 0;
+                padding-left: 20px;
+            }
+
+            .arrow-line .arrow {
+                color: #888888;
+                margin-right: 8px;
+            }
+
+            /* Grid layout for metrics */
+            .metrics-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+                gap: 15px;
+                margin: 15px 0;
+            }
+
+            .metric-card {
+                border: 1px solid #333333;
+                padding: 15px;
+                text-align: center;
+                background: #0a0a0a;
+            }
+
+            .metric-card .metric-label {
+                font-size: 11px;
+                color: #888888;
+                text-transform: uppercase;
+                letter-spacing: 1px;
+            }
+
+            .metric-card .metric-value {
+                font-size: 20px;
+                font-weight: 700;
+                margin-top: 6px;
+                color: #ffffff;
+            }
+
+            .metric-card .metric-value.green {
+                color: #00ff88;
+            }
+
+            .metric-card .metric-value.gold {
+                color: #ffaa00;
+            }
+
+            .metric-card .metric-value.red {
+                color: #ff4444;
+            }
+
+            /* Alert box */
+            .alert-box {
+                border: 1px solid #ff4444;
+                padding: 12px 18px;
+                margin: 10px 0;
+                background: #0a0000;
+            }
+
+            .alert-box .alert-title {
+                color: #ff4444;
+                font-weight: 600;
+                font-size: 13px;
+            }
+
+            .alert-box .alert-content {
+                color: #dddddd;
+                font-size: 13px;
+                margin-top: 4px;
+            }
+
+            /* Success box */
+            .success-box {
+                border: 1px solid #00ff88;
+                padding: 12px 18px;
+                margin: 10px 0;
+                background: #000a05;
+            }
+
+            .success-box .success-title {
+                color: #00ff88;
+                font-weight: 600;
+                font-size: 13px;
+            }
+
+            .success-box .success-content {
+                color: #dddddd;
+                font-size: 13px;
+                margin-top: 4px;
+            }
+
+            /* Info box */
+            .info-box {
+                border: 1px solid #4488ff;
+                padding: 12px 18px;
+                margin: 10px 0;
+                background: #000a1a;
+            }
+
+            .info-box .info-title {
+                color: #4488ff;
+                font-weight: 600;
+                font-size: 13px;
+            }
+
+            .info-box .info-content {
+                color: #dddddd;
+                font-size: 13px;
+                margin-top: 4px;
+            }
+
+            /* Warning box */
+            .warning-box {
+                border: 1px solid #ffaa00;
+                padding: 12px 18px;
+                margin: 10px 0;
+                background: #0a0800;
+            }
+
+            .warning-box .warning-title {
+                color: #ffaa00;
+                font-weight: 600;
+                font-size: 13px;
+            }
+
+            .warning-box .warning-content {
+                color: #dddddd;
+                font-size: 13px;
+                margin-top: 4px;
+            }
+
+            /* Footer */
+            .footer {
+                text-align: center;
+                padding: 20px;
+                color: #666666;
+                font-size: 12px;
+                border-top: 1px solid #222222;
+                margin-top: 30px;
+                letter-spacing: 0.5px;
+            }
+
+            /* Divider */
+            .divider {
+                border: none;
+                border-top: 1px solid #222222;
+                margin: 25px 0;
+            }
+
+            /* Responsive */
+            @media (max-width: 768px) {
+                body {
+                    padding: 15px 10px;
+                }
+                .header {
+                    padding: 20px;
+                }
+                .header h1 {
+                    font-size: 24px;
+                }
+                .section {
+                    padding: 20px;
+                }
+                .metrics-grid {
+                    grid-template-columns: repeat(2, 1fr);
+                }
+                .header .meta span {
+                    display: block;
+                    margin: 4px 0;
+                }
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <!-- HEADER -->
+            <div class="header">
+                <h1>STATELESS DECOUPLER</h1>
+                <div class="subtitle">
+                    K3s WordPress High-Availability Architecture
+                </div>
+                <div class="status-badge">PRODUCTION READY</div>
+                <div class="meta">
+                    <span>Date: August 2026</span>
+                    <span>|</span>
+                    <span>Version: 2.1.0</span>
+                    <span>|</span>
+                    <span>Uptime: 99.9%</span>
+                    <span>|</span>
+                    <span>Lead: DevOps Team</span>
+                </div>
+            </div>
+
+            <!-- IMAGE -->
+            <div class="image-section">
+                <img
+                    src="Stateless_Decoupler.png"
+                    alt="Stateless Decoupler Architecture Diagram"
+                />
+                <div class="image-caption">
+                    Architecture Flow: Load Balancer -> WordPress Pods -> Redis
+                    -> MySQL -> MinIO
+                </div>
+            </div>
+
+            <!-- SCENARIO 1 -->
+            <div class="section">
+                <div class="section-title">
+                    <span class="number">01.</span> First-Time Visitor Journey
+                </div>
+
+                <p><strong>User visits:</strong> https://mycoolstore.com</p>
+
+                <div class="sub-section">
+                    <div class="sub-section-title">
+                        DNS Resolution -> Load Balancer
+                    </div>
+                    <ul>
+                        <li>Domain resolves to K3s cluster's load balancer</li>
+                        <li>Load balancer checks pod CPU utilization</li>
+                        <li>Pod 1: 30% CPU | Pod 2: 45% CPU</li>
+                        <li>Request routed to Pod 1 (least busy)</li>
+                    </ul>
+                </div>
+
+                <div class="sub-section">
+                    <div class="sub-section-title">
+                        Inside Pod 1 - Nginx Container
+                    </div>
+                    <ul>
+                        <li>
+                            Nginx receives request and checks for static files
+                        </li>
+                        <li>Identifies as PHP request for index.php</li>
+                        <li>Forwards to PHP-FPM container within same pod</li>
+                    </ul>
+                </div>
+
+                <div class="sub-section">
+                    <div class="sub-section-title">
+                        Inside Pod 1 - PHP-FPM Container
+                    </div>
+                    <ul>
+                        <li>PHP-FPM starts executing WordPress code</li>
+                        <li>
+                            Checks for session cookie - None (first-time
+                            visitor)
+                        </li>
+                        <li>WordPress attempts to create new session</li>
+                        <li>
+                            Session storage configured for Redis (not local)
+                        </li>
+                        <li>PHP-FPM connects to Redis service</li>
+                    </ul>
+                    <div class="code-block">
+                        Redis stores: session_id = "abc123" data = { user_id:
+                        null, cart: [] }
+                    </div>
+                </div>
+
+                <div class="sub-section">
+                    <div class="sub-section-title">
+                        Database Queries with Redis Cache
+                    </div>
+                    <ul>
+                        <li>WordPress queries MySQL for homepage data</li>
+                        <li>
+                            Query: SELECT * FROM wp_posts WHERE post_type='page'
+                            AND post_name='home'
+                        </li>
+                        <li>
+                            Query: SELECT * FROM wp_posts WHERE
+                            post_type='product' LIMIT 12
+                        </li>
+                        <li>
+                            Query: SELECT * FROM wp_term_relationships WHERE ...
+                        </li>
+                    </ul>
+                    <div class="info-box">
+                        <div class="info-title">Redis Object Cache</div>
+                        <div class="info-content">
+                            WordPress checks Redis for 'homepage_data' - Cache
+                            miss<br />
+                            Queries MySQL and stores results in Redis (TTL: 1
+                            hour)
+                        </div>
+                    </div>
+                </div>
+
+                <div class="sub-section">
+                    <div class="sub-section-title">
+                        Media Files - S3 Offload
+                    </div>
+                    <ul>
+                        <li>
+                            WordPress looks for: /wp-content/uploads/product.jpg
+                        </li>
+                        <li>S3 offload plugin intercepts the request</li>
+                        <li>
+                            Generates CDN URL:
+                            https://cdn.mystore.com/product.jpg
+                        </li>
+                        <li>
+                            Nginx serves redirect to CDN or proxies to MinIO
+                        </li>
+                    </ul>
+                </div>
+
+                <div class="success-box">
+                    <div class="success-title">Response</div>
+                    <div class="success-content">
+                        HTML generated -> Nginx adds headers -> Sent to
+                        browser<br />
+                        Browser renders page with images loading from CDN<br />
+                        Time to First Byte: 180ms
+                    </div>
+                </div>
+
+                <div class="highlight-box">
+                    <div class="label">Key Insight</div>
+                    <div class="content">
+                        Session data lives independently of pods in Redis. Any
+                        pod can serve future requests for this user.
+                    </div>
+                </div>
+            </div>
+
+            <!-- SCENARIO 2 -->
+            <div class="section">
+                <div class="section-title">
+                    <span class="number">02.</span> Add to Cart (AJAX Request)
+                </div>
+
+                <div class="sub-section">
+                    <div class="sub-section-title">AJAX Request</div>
+                    <div class="code-block">
+                        POST /?wc-ajax=add_to_cart Payload: { product_id: 42,
+                        quantity: 1 }
+                    </div>
+                </div>
+
+                <div class="sub-section">
+                    <div class="sub-section-title">Load Balancer Decision</div>
+                    <ul>
+                        <li>Pod 1: 60% CPU (serving homepage)</li>
+                        <li>Pod 2: 40% CPU</li>
+                        <li>Load balancer routes to Pod 2 (least busy)</li>
+                    </ul>
+                </div>
+
+                <div class="sub-section">
+                    <div class="sub-section-title">Pod 2 Processes Request</div>
+                    <ul>
+                        <li>PHP-FPM receives request and checks session</li>
+                        <li>Browser sends: Cookie: wordpress_session=abc123</li>
+                        <li>
+                            WordPress connects to Redis: "Give me session
+                            abc123"
+                        </li>
+                        <li>Redis returns: { user_id: null, cart: [] }</li>
+                        <li>
+                            WordPress updates cart: { product_id: 42, quantity:
+                            1 }
+                        </li>
+                        <li>Saves back to Redis with updated cart data</li>
+                    </ul>
+                </div>
+
+                <div class="info-box">
+                    <div class="info-title">
+                        Session Data Lives Outside Pod 2
+                    </div>
+                    <div class="info-content">
+                        The session data is NOT stored in Pod 2's local
+                        storage<br />
+                        It's stored in Redis (a separate service)<br /><br />
+                        This means:<br />
+                        - If Pod 2 crashes -> Session data is safe<br />
+                        - If Pod 2 scales up -> New pod can read same session<br />
+                        - If Pod 2 scales down -> Session data persists
+                    </div>
+                </div>
+
+                <div class="success-box">
+                    <div class="success-title">Response</div>
+                    <div class="success-content">
+                        Pod 2 sends: "Cart updated successfully!"<br />
+                        Session cookie remains the same<br />
+                        User doesn't know which pod served the request
+                    </div>
+                </div>
+            </div>
+
+            <!-- SCENARIO 3 -->
+            <div class="section">
+                <div class="section-title">
+                    <span class="number">03.</span> Pod Failure and Self-Healing
+                </div>
+
+                <div class="sub-section">
+                    <div class="sub-section-title">Pod 1 Crashes</div>
+                    <ul>
+                        <li>
+                            User is checking out, filling in shipping details
+                        </li>
+                        <li>Pod 1 is handling this request</li>
+                        <li>Pod 1 crashes (OOM, network issue, code bug)</li>
+                    </ul>
+                </div>
+
+                <div class="sub-section">
+                    <div class="sub-section-title">
+                        Kubernetes Detects Failure
+                    </div>
+                    <ul>
+                        <li>
+                            Kubelet (agent on node) notices Pod 1 is not
+                            responding
+                        </li>
+                        <li>Kubelet marks Pod 1 as unhealthy</li>
+                        <li>
+                            Kubernetes creates a new Pod 1 (fresh container)
+                        </li>
+                    </ul>
+                </div>
+
+                <div class="sub-section">
+                    <div class="sub-section-title">
+                        User is Still on the Site
+                    </div>
+                    <ul>
+                        <li>User refreshes or continues</li>
+                        <li>Load balancer routes to Pod 2 (still running)</li>
+                    </ul>
+                </div>
+
+                <div class="sub-section">
+                    <div class="sub-section-title">
+                        Pod 2 Has All the Context
+                    </div>
+                    <ul>
+                        <li>Pod 2 receives the request</li>
+                        <li>Reads session cookie: wordpress_session=abc123</li>
+                        <li>Connects to Redis: "Give me session abc123"</li>
+                    </ul>
+                    <div class="code-block">
+                        Redis returns: { user_id: 123, cart: [product_42: 1,
+                        product_17: 3], checkout_data: { shipping: "address",
+                        payment: "credit_card" } }
+                    </div>
+                    <ul>
+                        <li>Pod 2 continues the checkout process seamlessly</li>
+                        <li>User never knew Pod 1 died</li>
+                    </ul>
+                </div>
+
+                <div class="sub-section">
+                    <div class="sub-section-title">New Pod 1 Starts Up</div>
+                    <ul>
+                        <li>Kubernetes: "Pod 1 is now running"</li>
+                        <li>
+                            Pod 1 starts fresh - no session data, no media files
+                        </li>
+                        <li>
+                            When user routes to Pod 1, it connects to Redis for
+                            session data
+                        </li>
+                        <li>Pod 1 works perfectly</li>
+                    </ul>
+                </div>
+
+                <div class="success-box">
+                    <div class="success-title">Result</div>
+                    <div class="success-content">
+                        User never notices the failure. Zero downtime
+                        experience.
+                    </div>
+                </div>
+            </div>
+
+            <!-- SCENARIO 4 -->
+            <div class="section">
+                <div class="section-title">
+                    <span class="number">04.</span> Auto-Scaling (Traffic Surge)
+                </div>
+
+                <div class="sub-section">
+                    <div class="sub-section-title">Traffic Spikes</div>
+                    <ul>
+                        <li>9:00 AM: 50 concurrent users</li>
+                        <li>9:05 AM: 500 concurrent users</li>
+                        <li>9:10 AM: 2,000 concurrent users</li>
+                    </ul>
+                </div>
+
+                <div class="sub-section">
+                    <div class="sub-section-title">
+                        Horizontal Scaling Triggered
+                    </div>
+                    <ul>
+                        <li>
+                            Kubernetes Metrics Server: CPU usage at 85% across
+                            pods
+                        </li>
+                        <li>
+                            Horizontal Pod Autoscaler (HPA): "We have 2 pods,
+                            need more"
+                        </li>
+                        <li>HPA: "Scale to 5 replicas"</li>
+                        <li>Kubernetes creates 3 new WordPress pods</li>
+                    </ul>
+                </div>
+
+                <div class="sub-section">
+                    <div class="sub-section-title">
+                        New Pods Join the Cluster
+                    </div>
+                    <ul>
+                        <li>Pod 3 starts: Fresh WordPress container</li>
+                        <li>
+                            Pod 3: "I don't have any files in
+                            /wp-content/uploads/"
+                        </li>
+                        <li>Pod 3: "I don't have any session data locally"</li>
+                    </ul>
+                    <div class="info-box">
+                        <div class="info-title">But Pod 3 Connects To</div>
+                        <div class="info-content">
+                            - Redis for sessions and object cache<br />
+                            - MinIO for media files<br />
+                            - MySQL for database
+                        </div>
+                    </div>
+                    <ul>
+                        <li>Pod 3 is fully functional in seconds</li>
+                    </ul>
+                </div>
+
+                <div class="sub-section">
+                    <div class="sub-section-title">
+                        Load Balancer Distributes Traffic
+                    </div>
+                    <ul>
+                        <li>5 pods now handle traffic</li>
+                        <li>Pod 1: 20% of traffic</li>
+                        <li>Pod 2: 20% of traffic</li>
+                        <li>Pod 3: 20% of traffic</li>
+                        <li>Pod 4: 20% of traffic</li>
+                        <li>Pod 5: 20% of traffic</li>
+                    </ul>
+                </div>
+
+                <div class="warning-box">
+                    <div class="warning-title">
+                        Session Stickiness - Comparison
+                    </div>
+                    <div class="warning-content">
+                        Without stateless decoupling:<br />
+                        - Session stored in Pod 1's local storage<br />
+                        - User must ALWAYS hit Pod 1 (sticky sessions)<br />
+                        - If Pod 1 dies -> User loses session<br /><br />
+                        With stateless decoupling:<br />
+                        - Session in Redis<br />
+                        - User can hit ANY pod<br />
+                        - If Pod 1 dies -> Other pod can continue<br />
+                        - Perfect for horizontal scaling
+                    </div>
+                </div>
+
+                <div class="success-box">
+                    <div class="success-title">Result</div>
+                    <div class="success-content">
+                        5 pods serve traffic -> 200% capacity. Zero session
+                        loss.
+                    </div>
+                </div>
+            </div>
+
+            <!-- SCENARIO 5 -->
+            <div class="section">
+                <div class="section-title">
+                    <span class="number">05.</span> Media Upload to S3
+                </div>
+
+                <div class="sub-section">
+                    <div class="sub-section-title">
+                        User Uploads Image in WordPress Admin
+                    </div>
+                    <ul>
+                        <li>
+                            User: "I want to add this product image:
+                            product_photo.jpg"
+                        </li>
+                        <li>User clicks upload</li>
+                    </ul>
+                </div>
+
+                <div class="sub-section">
+                    <div class="sub-section-title">
+                        WordPress Receives the File
+                    </div>
+                    <ul>
+                        <li>
+                            WordPress normally: "Save to
+                            /wp-content/uploads/2026/08/product_photo.jpg"
+                        </li>
+                        <li>But configured S3 offload</li>
+                        <li>
+                            WordPress: "Actually, save to S3-compatible storage"
+                        </li>
+                    </ul>
+                </div>
+
+                <div class="sub-section">
+                    <div class="sub-section-title">
+                        MinIO (S3) Storage Process
+                    </div>
+                    <ul>
+                        <li>WordPress connects to MinIO using AWS S3 API</li>
+                        <li>MinIO credentials: admin / password123</li>
+                        <li>
+                            WordPress: "Upload file to bucket 'wordpress' with
+                            key '2026/08/product_photo.jpg'"
+                        </li>
+                        <li>MinIO: "File saved successfully"</li>
+                    </ul>
+                    <div class="code-block">
+                        Access via:
+                        http://minio:9000/wordpress/2026/08/product_photo.jpg
+                    </div>
+                </div>
+
+                <div class="sub-section">
+                    <div class="sub-section-title">CDN URL Generation</div>
+                    <ul>
+                        <li>WordPress stores: "Product image is at S3"</li>
+                        <li>WordPress generates CDN URL</li>
+                    </ul>
+                    <div class="code-block">
+                        https://cdn.mystore.com/2026/08/product_photo.jpg
+                    </div>
+                    <ul>
+                        <li>If no CDN, uses MinIO proxy URL</li>
+                    </ul>
+                </div>
+
+                <div class="sub-section">
+                    <div class="sub-section-title">Pod Independence</div>
+                    <ul>
+                        <li>The file is NOT in any pod's local storage</li>
+                        <li>Pod 1, 2, 3, 4, 5 ALL can access it via:</li>
+                        <li>- MinIO directly</li>
+                        <li>- CDN URL (if configured)</li>
+                    </ul>
+                    <div class="info-box">
+                        <div class="info-title">Disaster Recovery</div>
+                        <div class="info-content">
+                            If we delete ALL pods and recreate them:<br />
+                            - Files are still in MinIO<br />
+                            - WordPress installs reconnect to MinIO<br />
+                            - All media is still available
+                        </div>
+                    </div>
+                </div>
+
+                <div class="success-box">
+                    <div class="success-title">Stateless Media</div>
+                    <div class="success-content">
+                        Files persist even if all pods are deleted. New pods
+                        access existing media immediately.
+                    </div>
+                </div>
+            </div>
+
+            <!-- SCENARIO 6 -->
+            <div class="section">
+                <div class="section-title">
+                    <span class="number">06.</span> Cache Invalidation and
+                    Updates
+                </div>
+
+                <div class="sub-section">
+                    <div class="sub-section-title">
+                        Editor Updates a Product Description
+                    </div>
+                    <ul>
+                        <li>User clicks "Update" on product page</li>
+                        <li>WordPress runs:</li>
+                    </ul>
+                    <div class="code-block">
+                        UPDATE wp_posts SET post_content='new description' WHERE
+                        ID=42
+                    </div>
+                </div>
+
+                <div class="sub-section">
+                    <div class="sub-section-title">
+                        Redis Cache Invalidation
+                    </div>
+                    <ul>
+                        <li>WordPress: "I have product_42 cached in Redis"</li>
+                        <li>
+                            WordPress: "Delete key 'product_42_data' from Redis"
+                        </li>
+                        <li>Redis: "Key deleted"</li>
+                        <li>
+                            WordPress: "Also delete 'homepage_data' because
+                            product changed"
+                        </li>
+                        <li>Redis: "Deleted"</li>
+                    </ul>
+                </div>
+
+                <div class="sub-section">
+                    <div class="sub-section-title">
+                        Next Visitor Sees Updated Content
+                    </div>
+                    <ul>
+                        <li>New visitor requests homepage</li>
+                        <li>WordPress checks Redis for 'homepage_data'</li>
+                        <li>Redis: "Not found (cache miss)"</li>
+                        <li>WordPress queries MySQL for fresh data</li>
+                        <li>WordPress saves to Redis with TTL: 1 hour</li>
+                        <li>New visitor sees updated content</li>
+                    </ul>
+                    <div class="highlight-box">
+                        <div class="label">Consistency</div>
+                        <div class="content">
+                            All pods query Redis -> All see fresh data. Cache is
+                            shared across all pods.
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SCENARIO 7 -->
+            <div class="section">
+                <div class="section-title">
+                    <span class="number">07.</span> Monitoring and Observability
+                </div>
+
+                <div class="sub-section">
+                    <div class="sub-section-title">
+                        Prometheus Metrics Collection
+                    </div>
+                    <div
+                        style="
+                            display: grid;
+                            grid-template-columns: 1fr 1fr 1fr;
+                            gap: 20px;
+                            margin: 10px 0;
+                        "
+                    >
+                        <div>
+                            <strong>Each Pod Exports</strong>
+                            <ul style="font-size: 13px; margin-top: 5px">
+                                <li>CPU usage: 45%</li>
+                                <li>Memory: 256MB</li>
+                                <li>HTTP requests: 1,234 per second</li>
+                                <li>Error rate: 0.2%</li>
+                            </ul>
+                        </div>
+                        <div>
+                            <strong>Redis Exports</strong>
+                            <ul style="font-size: 13px; margin-top: 5px">
+                                <li>Connected clients: 5</li>
+                                <li>Cache hit rate: 94%</li>
+                                <li>Memory used: 128MB</li>
+                            </ul>
+                        </div>
+                        <div>
+                            <strong>MinIO Exports</strong>
+                            <ul style="font-size: 13px; margin-top: 5px">
+                                <li>Objects stored: 12,345</li>
+                                <li>Storage used: 2.3GB</li>
+                                <li>Uploads per minute: 45</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="sub-section">
+                    <div class="sub-section-title">
+                        Grafana Dashboard Metrics
+                    </div>
+                    <div class="metrics-grid">
+                        <div class="metric-card">
+                            <div class="metric-label">Pod Count</div>
+                            <div class="metric-value green">5</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-label">Active Sessions</div>
+                            <div class="metric-value">2,345</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-label">Cache Hit Ratio</div>
+                            <div class="metric-value green">94%</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-label">Load Average</div>
+                            <div class="metric-value green">0.8</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-label">Media Requests</div>
+                            <div class="metric-value">12,000/min</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-label">TTFB</div>
+                            <div class="metric-value green">180ms</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="sub-section">
+                    <div class="sub-section-title">Alerting Rules</div>
+                    <div class="alert-box">
+                        <div class="alert-title">Alert 1</div>
+                        <div class="alert-content">
+                            Redis memory usage at 85%
+                        </div>
+                    </div>
+                    <div class="alert-box">
+                        <div class="alert-title">Alert 2</div>
+                        <div class="alert-content">Pod 3 CPU at 95%</div>
+                    </div>
+                    <div class="alert-box">
+                        <div class="alert-title">Alert 3</div>
+                        <div class="alert-content">
+                            Cache hit ratio dropped to 70%
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- CONCLUSION -->
+            <div class="section" style="border-color: #00ff88">
+                <div class="section-title" style="border-bottom-color: #00ff88">
+                    Why Stateless Decoupler Matters
+                </div>
+
+                <div
+                    style="
+                        display: grid;
+                        grid-template-columns: 1fr 1fr;
+                        gap: 20px;
+                        margin: 15px 0;
+                    "
+                >
+                    <div
+                        class="success-box"
+                        style="border-color: #00ff88; background: #000a05"
+                    >
+                        <div class="success-title">High Availability</div>
+                        <div class="success-content">
+                            Self-healing pods with fault-tolerant state
+                            management
+                        </div>
+                    </div>
+                    <div
+                        class="success-box"
+                        style="border-color: #00ff88; background: #000a05"
+                    >
+                        <div class="success-title">Zero-Downtime</div>
+                        <div class="success-content">
+                            Rolling updates without any session loss
+                        </div>
+                    </div>
+                    <div
+                        class="info-box"
+                        style="border-color: #ffaa00; background: #0a0800"
+                    >
+                        <div class="info-title" style="color: #ffaa00">
+                            Stateless Design
+                        </div>
+                        <div class="info-content">
+                            No local state -> True horizontal scaling capability
+                        </div>
+                    </div>
+                    <div
+                        class="info-box"
+                        style="border-color: #ffaa00; background: #0a0800"
+                    >
+                        <div class="info-title" style="color: #ffaa00">
+                            Cost-Efficient
+                        </div>
+                        <div class="info-content">
+                            Scale only when needed using HPA
+                        </div>
+                    </div>
+                </div>
+
+                <div
+                    class="highlight-box"
+                    style="border-color: #00ff88; background: #000a05"
+                >
+                    <div class="label" style="color: #00ff88">
+                        Core Philosophy
+                    </div>
+                    <div
+                        class="content"
+                        style="
+                            font-size: 16px;
+                            text-align: center;
+                            padding: 10px 0;
+                        "
+                    >
+                        "Build once, run anywhere. Scale to millions."
+                    </div>
+                </div>
+
+                <div
+                    style="
+                        margin-top: 20px;
+                        padding: 15px;
+                        border: 1px solid #333333;
+                        background: #0a0a0a;
+                    "
+                >
+                    <div
+                        style="
+                            font-size: 13px;
+                            color: #888888;
+                            letter-spacing: 1px;
+                            text-transform: uppercase;
+                            margin-bottom: 8px;
+                        "
+                    >
+                        Key Technologies
+                    </div>
+                    <div
+                        style="
+                            display: flex;
+                            gap: 15px;
+                            flex-wrap: wrap;
+                            font-size: 14px;
+                        "
+                    >
+                        <span
+                            style="border: 1px solid #444444; padding: 4px 14px"
+                            >K3s</span
+                        >
+                        <span
+                            style="border: 1px solid #444444; padding: 4px 14px"
+                            >WordPress</span
+                        >
+                        <span
+                            style="border: 1px solid #444444; padding: 4px 14px"
+                            >Redis</span
+                        >
+                        <span
+                            style="border: 1px solid #444444; padding: 4px 14px"
+                            >MySQL</span
+                        >
+                        <span
+                            style="border: 1px solid #444444; padding: 4px 14px"
+                            >MinIO</span
+                        >
+                        <span
+                            style="border: 1px solid #444444; padding: 4px 14px"
+                            >Prometheus</span
+                        >
+                        <span
+                            style="border: 1px solid #444444; padding: 4px 14px"
+                            >Grafana</span
+                        >
+                        <span
+                            style="border: 1px solid #444444; padding: 4px 14px"
+                            >HPA</span
+                        >
+                    </div>
+                </div>
+            </div>
+
+            <!-- FOOTER -->
+            <div class="footer">
+                Confidential - Internal Use | Page 1 | Stateless Decoupler
+                v2.1.0<br />
+                Architecture Overview: Load Balancer -> WordPress Pods -> Redis
+                -> MySQL -> MinIO
+            </div>
+        </div>
+    </body>
+</html>

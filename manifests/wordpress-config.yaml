@@ -1,0 +1,161 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: wordpress-config
+  namespace: wordpress
+data:
+  wp-config.php: |
+    <?php
+    /**
+     * WordPress Configuration with Redis, MinIO, and Session Offloading
+     */
+
+    // Database Configuration
+    define('DB_NAME', 'wordpress');
+    define('DB_USER', 'wpuser');
+    define('DB_PASSWORD', 'wppassword');
+    define('DB_HOST', 'mysql:3306');
+    define('DB_CHARSET', 'utf8');
+    define('DB_COLLATE', '');
+
+    // Redis Configuration (Object Cache)
+    define('WP_REDIS_HOST', 'redis');
+    define('WP_REDIS_PORT', 6379);
+    define('WP_REDIS_DATABASE', 0);
+    define('WP_REDIS_TIMEOUT', 1);
+    define('WP_REDIS_READ_TIMEOUT', 1);
+    define('WP_REDIS_PREFIX', 'wp_');
+
+    // Redis Session Handler
+    ini_set('session.save_handler', 'redis');
+    ini_set('session.save_path', 'tcp://redis:6379?auth=');
+
+    // S3/MinIO Configuration
+    define('S3_UPLOADS_BUCKET', 'wordpress');
+    define('S3_UPLOADS_KEY', 'admin');
+    define('S3_UPLOADS_SECRET', 'password123');
+    define('S3_UPLOADS_REGION', 'us-east-1');
+    define('S3_UPLOADS_ENDPOINT', 'http://minio:9000');
+    define('S3_UPLOADS_USE_PATH_STYLE_ENDPOINT', true);
+    // Public URL for attachments: proxied through the same ingress as the
+    // site (see wordpress.yaml's "/wordpress" path rule) so the browser
+    // never needs direct access to MinIO.
+    define('S3_UPLOADS_BUCKET_URL', 'http://localhost:8080/wordpress');
+    define('S3_UPLOADS_OBJECT_PREFIX', '');
+    define('S3_UPLOADS_DELETE_FILES', false);
+
+    // Force HTTPS (if needed)
+    // define('FORCE_SSL_ADMIN', true);
+
+    // WordPress Security Keys (generate your own)
+    define('AUTH_KEY',         'put-your-unique-key-here-1');
+    define('SECURE_AUTH_KEY',  'put-your-unique-key-here-2');
+    define('LOGGED_IN_KEY',    'put-your-unique-key-here-3');
+    define('NONCE_KEY',        'put-your-unique-key-here-4');
+    define('AUTH_SALT',        'put-your-unique-key-here-5');
+    define('SECURE_AUTH_SALT', 'put-your-unique-key-here-6');
+    define('LOGGED_IN_SALT',   'put-your-unique-key-here-7');
+    define('NONCE_SALT',       'put-your-unique-key-here-8');
+
+    // Table Prefix
+    $table_prefix = 'wp_';
+
+    // Debug Mode (set to true for development)
+    define('WP_DEBUG', false);
+    define('WP_DEBUG_LOG', false);
+    define('WP_DEBUG_DISPLAY', false);
+
+    // WordPress Environment
+    define('WP_ENVIRONMENT_TYPE', 'development');
+
+    // Disable WordPress Cron (will be handled by K8s CronJob in later projects)
+    define('DISABLE_WP_CRON', false);
+
+    // Increase memory limit
+    define('WP_MEMORY_LIMIT', '256M');
+    define('WP_MAX_MEMORY_LIMIT', '512M');
+
+    // Absolute path to WordPress directory
+    if (!defined('ABSPATH')) {
+        define('ABSPATH', __DIR__ . '/');
+    }
+
+    // Composer autoloader for the s3-uploads plugin's AWS SDK dependency
+    require_once ABSPATH . 'vendor/autoload.php';
+
+    // Sets up WordPress vars and included files
+    require_once ABSPATH . 'wp-settings.php';
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nginx-config
+  namespace: wordpress
+data:
+  nginx.conf: |
+    server {
+        listen 80;
+        server_name localhost;
+        root /var/www/html;
+        index index.php index.html;
+
+        # Logging
+        access_log /var/log/nginx/access.log;
+        error_log /var/log/nginx/error.log;
+
+        # Security headers
+        add_header X-Frame-Options "SAMEORIGIN" always;
+        add_header X-XSS-Protection "1; mode=block" always;
+        add_header X-Content-Type-Options "nosniff" always;
+
+        # WordPress permalinks
+        location / {
+            try_files $uri $uri/ /index.php?$args;
+        }
+
+        # PHP processing
+        location ~ \.php$ {
+            fastcgi_pass 127.0.0.1:9000;
+            fastcgi_index index.php;
+            fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+            fastcgi_param PATH_INFO $fastcgi_path_info;
+            include fastcgi_params;
+
+            # PHP-FPM timeout
+            fastcgi_read_timeout 300s;
+        }
+
+        # PHP-FPM status page (pm.status_path in php-fpm.d/www.conf) — read by
+        # the k6 dashboard backend to report active/idle workers per pod.
+        # Not restricted to localhost since it's only reachable inside the
+        # cluster network (no Ingress route to it), and this is a dev stack.
+        location = /fpm-status {
+            fastcgi_pass 127.0.0.1:9000;
+            include fastcgi_params;
+            fastcgi_param SCRIPT_FILENAME /status;
+            fastcgi_param SCRIPT_NAME /status;
+        }
+
+        # Static files caching
+        location ~* \.(jpg|jpeg|png|gif|ico|css|js|svg|webp|woff|woff2|ttf|eot)$ {
+            expires 1y;
+            add_header Cache-Control "public, immutable";
+            log_not_found off;
+            access_log off;
+        }
+
+        # Deny access to sensitive files
+        location ~ /\.ht {
+            deny all;
+        }
+
+        location ~ /wp-config.php {
+            deny all;
+        }
+
+        location ~ /xmlrpc.php {
+            allow 127.0.0.1;
+            deny all;
+        }
+    }
