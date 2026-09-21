@@ -1,0 +1,150 @@
+# Makes PHP-FPM worker saturation visible to Prometheus, and from there to the
+# HPA via the Prometheus Adapter. Kept separate from wordpress.yaml because
+# these are Prometheus Operator CRDs — the app stack must stay deployable on a
+# cluster that has no monitoring installed.
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: wordpress-php-fpm
+  namespace: wordpress
+  labels:
+    app: wordpress
+    # kube-prometheus-stack's default selectors match on the Helm release name.
+    # Without this the operator silently ignores these objects — they apply
+    # cleanly and simply never take effect.
+    release: monitoring
+spec:
+  selector:
+    matchLabels:
+      app: wordpress
+  namespaceSelector:
+    matchNames:
+      - wordpress
+  endpoints:
+    # Port name from the wordpress Service. Scraped every 10s rather than the
+    # default 30s: the HPA polls every 15s, so a slower scrape would make
+    # scaling decisions on metrics older than the decision interval itself.
+    - port: metrics
+      interval: 10s
+      path: /metrics
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: wordpress-php-fpm-rules
+  namespace: wordpress
+  labels:
+    app: wordpress
+    release: monitoring
+spec:
+  groups:
+    - name: php-fpm.rules
+      interval: 10s
+      rules:
+        # Fraction of this pod's PHP-FPM worker pool that is actively serving a
+        # request. 1.0 means every worker is busy and further requests queue in
+        # the listen backlog — the point where added latency is felt by users,
+        # regardless of what CPU says.
+        #
+        # PHP-FPM's status page reports active/idle/total workers but NOT the
+        # configured pm.max_children, so the denominator comes from
+        # kube_pod_container_resource_limits (published by kube-state-metrics)
+        # divided by PHP_FPM_PROCESS_MB. That mirrors exactly how the pod
+        # computes pm.max_children at startup, so the two cannot drift.
+        #
+        # Constants below are the byte equivalents of the defaults in
+        # manifests/fpm-autotune.sh and must be changed together:
+        #   134217728 = PHP_FPM_RESERVED_MB (128Mi — FPM master + nginx + headroom)
+        #    50331648 = PHP_FPM_PROCESS_MB  (48Mi)
+        - record: phpfpm_worker_utilization_ratio
+          expr: |
+            phpfpm_active_processes
+              / on(namespace, pod) group_left
+            clamp_min(
+              floor(
+                (kube_pod_container_resource_limits{
+                  namespace="wordpress", container="wordpress", resource="memory"
+                } - 134217728) / 50331648
+              ),
+              1
+            )
+---
+# Replaces the CPU/memory-only HPA defined in manifests/wordpress.yaml —
+# deliberately the SAME resource name, so applying this upgrades the existing
+# autoscaler in place. Two HPAs targeting one Deployment would fight each other.
+#
+# Re-applying manifests/wordpress.yaml reverts to the CPU-only version; re-apply
+# this file to restore worker-based scaling.
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: wordpress-hpa
+  namespace: wordpress
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: wordpress
+  minReplicas: 2
+  maxReplicas: 5
+
+  # Without this block Kubernetes applies its defaults, which are a poor fit
+  # for a single-machine cluster and for demonstrating scaling to a human.
+  behavior:
+    scaleUp:
+      # React immediately, but add at most 2 pods per 15s. The default allows
+      # doubling at once, and starting 3+ containers simultaneously on one
+      # machine is what drives this cluster into CreateContainerError: each
+      # container needs a 212MB overlay assembled, they contend for the same
+      # disk, every one exceeds the kubelet's CreateContainer deadline, and the
+      # retries collide with the still-running attempts.
+      stabilizationWindowSeconds: 0
+      policies:
+        - type: Pods
+          value: 2
+          periodSeconds: 15
+    scaleDown:
+      # 2 minutes of quiet before shedding, then one pod every 30s. Still a
+      # staircase rather than the default cliff (which drops straight to the
+      # floor in one step), but tuned for a demo you watch in real time: a
+      # 5 -> 2 wind-down completes in about 3 minutes instead of 11.
+      stabilizationWindowSeconds: 120
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 30
+
+  # Scaling is driven by PHP-FPM worker saturation, with memory only as an OOM
+  # backstop. CPU is deliberately absent.
+  #
+  # CPU was removed after it repeatedly scaled this deployment to max with zero
+  # traffic. Starting a pod costs real CPU — container creation, PHP-FPM boot,
+  # opcache warming — and pods request only 350m, so a starting pod exceeds a
+  # 70% target on its own. That creates a feedback loop: startup CPU reads as
+  # demand, the HPA adds pods, those pods start up, CPU rises again. A routine
+  # rollout drove it 2 -> 3 -> 4 -> 5 with nobody using the store.
+  #
+  # Worker utilization does not have this failure mode: a booting pod has zero
+  # active workers, so it correctly reports no demand. It is also the metric
+  # that reflects what users feel — when every worker is busy, requests queue in
+  # the listen backlog whether or not those workers are burning CPU. A pod
+  # blocked on a slow database or object store is 100% saturated at ~0% CPU,
+  # which CPU-based scaling cannot see at all.
+  metrics:
+    - type: Pods
+      pods:
+        metric:
+          name: phpfpm_worker_utilization
+        target:
+          # Quantity, not a percentage: 750m == 0.75 == 75% of the pod's
+          # computed pm.max_children. Scaling at 75% rather than 100% leaves
+          # headroom for the time it takes a new pod to start serving.
+          type: AverageValue
+          averageValue: "750m"
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80

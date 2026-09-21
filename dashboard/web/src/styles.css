@@ -276,3 +276,93 @@ body {
   white-space: pre-wrap;
   color: var(--text-secondary);
 }
+
+/* ── Buttons ───────────────────────────────────────────────────────────── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 500;
+  font-family: inherit;
+  color: var(--text-primary);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+
+.btn:hover:not(:disabled) { border-color: var(--text-muted); }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+
+.btn-primary {
+  background: var(--series-1);
+  border-color: var(--series-1);
+  color: #fff;
+}
+
+.btn-active {
+  background: var(--series-1);
+  border-color: var(--series-1);
+  color: #fff;
+}
+
+.btn-danger {
+  background: transparent;
+  border-color: var(--border);
+  color: var(--status-critical);
+}
+.btn-danger:hover:not(:disabled) { border-color: var(--status-critical); }
+
+.btn-sm { padding: 2px 8px; font-size: 11px; }
+
+/* ── Store & cluster controls ──────────────────────────────────────────── */
+.control-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 28px;
+}
+
+.control-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.control-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .4px;
+  color: var(--text-muted);
+}
+
+.control-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.control-message {
+  margin-top: 14px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  background: var(--surface-2);
+  color: var(--text-secondary);
+  border-left: 3px solid var(--series-1);
+}
+
+.control-message.error {
+  border-left-color: var(--status-critical);
+  color: var(--status-critical);
+}
+
+/* The pod header now holds a third child (the kill button), so the name takes
+   the slack instead of the row spreading all three apart. */
+.pod-card-header { gap: 8px; }
+.pod-card-header .pod-name { margin-right: auto; }

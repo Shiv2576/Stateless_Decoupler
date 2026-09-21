@@ -39,7 +39,7 @@ spec:
             claimName: minio-pvc
       containers:
         - name: minio
-          image: minio/minio:latest
+          image: quay.io/minio/minio:latest
           args:
             - server
             - /data

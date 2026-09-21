@@ -20,27 +20,18 @@ spec:
       labels:
         app: wordpress
     spec:
-      initContainers:
-        # Populates the shared "html" emptyDir with the WordPress core +
-        # plugin files baked into this image, so the nginx sidecar (which
-        # has no WordPress files of its own) can serve them directly.
-        - name: init-html
-          image: wordpress-custom:6.6-php8.2-fpm-alpine
-          imagePullPolicy: IfNotPresent
-          command:
-            - sh
-            - -c
-            - "cp -a /var/www/html/. /shared-html/ && chown -R www-data:www-data /shared-html"
-          volumeMounts:
-            - name: html
-              mountPath: /shared-html
-
       containers:
-        # WordPress PHP-FPM
+        # nginx + PHP-FPM in one container, both serving WordPress straight from
+        # the image layer. Previously these were separate containers sharing an
+        # emptyDir that an initContainer had to populate with ~12k files on every
+        # pod start — a fixed tax on every scale-out, paid to hand nginx files it
+        # could simply have had already.
         - name: wordpress
           image: wordpress-custom:6.6-php8.2-fpm-alpine
           imagePullPolicy: IfNotPresent
           ports:
+            - name: http
+              containerPort: 80
             - containerPort: 9000
           env:
             - name: WORDPRESS_DB_HOST
@@ -56,65 +47,78 @@ spec:
                 define('WP_REDIS_HOST', 'redis');
                 define('WP_REDIS_PORT', 6379);
           volumeMounts:
-            - name: html
-              mountPath: /var/www/html
             - name: wp-config
               mountPath: /var/www/html/wp-config.php
               subPath: wp-config.php
-          resources:
-            limits:
-              memory: 512Mi
-              cpu: "500m"
-            requests:
-              memory: 256Mi
-              cpu: "250m"
-
-          livenessProbe:
-            tcpSocket:
-              port: 9000
-            initialDelaySeconds: 30
-            periodSeconds: 10
-          readinessProbe:
-            tcpSocket:
-              port: 9000
-            initialDelaySeconds: 20
-            periodSeconds: 5
-
-        # Nginx
-        - name: nginx
-          image: nginx:alpine
-          imagePullPolicy: IfNotPresent
-          ports:
-            - containerPort: 80
-          volumeMounts:
-            - name: html
-              mountPath: /var/www/html
-              readOnly: true
+            # Alpine's nginx package includes /etc/nginx/http.d/*.conf, not the
+            # conf.d/ path used by the nginx:alpine image.
             - name: nginx-config
-              mountPath: /etc/nginx/conf.d/default.conf
+              mountPath: /etc/nginx/http.d/default.conf
               subPath: nginx.conf
+          # Sum of what the two separate containers previously reserved, so the
+          # pod's total footprint is unchanged by the merge. fpm-autotune.sh
+          # derives pm.max_children from this limit at startup.
           resources:
             limits:
-              memory: 256Mi
-              cpu: "250m"
+              memory: 768Mi
+              cpu: "750m"
             requests:
-              memory: 128Mi
-              cpu: "100m"
-          # ✅ ADDED: Nginx health checks
-          livenessProbe:
-            tcpSocket:
+              memory: 384Mi
+              cpu: "350m"
+
+          # Gates readiness/liveness until the pod genuinely serves traffic,
+          # instead of the previous fixed 20s initialDelaySeconds — which spent
+          # ~20s of every scale-out waiting on a pod that was already up.
+          # Checking once a second means readiness is detected when it happens
+          # rather than up to a period later.
+          startupProbe:
+            httpGet:
+              path: /fpm-status
               port: 80
-            initialDelaySeconds: 10
-            periodSeconds: 10
+            periodSeconds: 1
+            failureThreshold: 60
+          # /fpm-status traverses nginx -> FastCGI -> PHP-FPM, so it proves both
+          # processes are up and talking, which an open TCP port does not.
+          # Deliberately not a WordPress page: tying readiness to MySQL would
+          # make a brief database blip pull every pod out of service at once.
           readinessProbe:
-            tcpSocket:
+            httpGet:
+              path: /fpm-status
               port: 80
-            initialDelaySeconds: 5
             periodSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /fpm-status
+              port: 80
+            periodSeconds: 10
+            failureThreshold: 3
+
+        # Scrapes PHP-FPM's status page over FastCGI (not through nginx) and
+        # re-publishes it as Prometheus metrics. This is what makes the HPA able
+        # to scale on worker saturation — the signal that actually reflects
+        # user-facing capacity — instead of only CPU, which stays low when
+        # workers are blocked on I/O rather than computing.
+        - name: php-fpm-exporter
+          image: hipages/php-fpm_exporter:2.2.0
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: PHP_FPM_SCRAPE_URI
+              value: "tcp://127.0.0.1:9000/status"
+            - name: PHP_FPM_WEB_LISTEN_ADDRESS
+              value: ":9253"
+          ports:
+            - name: metrics
+              containerPort: 9253
+          resources:
+            limits:
+              memory: 64Mi
+              cpu: "100m"
+            requests:
+              memory: 32Mi
+              cpu: "10m"
 
       volumes:
-        - name: html
-          emptyDir: {}
         - name: wp-config
           configMap:
             name: wordpress-config
@@ -127,11 +131,19 @@ kind: Service
 metadata:
   name: wordpress
   namespace: wordpress
+  labels:
+    app: wordpress
 spec:
   type: ClusterIP
   ports:
-    - port: 80
+    - name: http
+      port: 80
       targetPort: 80
+    # Scraped by the ServiceMonitor in manifests/monitoring/php-fpm-metrics.yaml.
+    # Named so the ServiceMonitor can reference it by name rather than number.
+    - name: metrics
+      port: 9253
+      targetPort: 9253
   selector:
     app: wordpress
 ---
@@ -174,13 +186,19 @@ spec:
     name: wordpress
   minReplicas: 2
   maxReplicas: 5
+  # This is the fallback autoscaler for a cluster with no Prometheus. It has no
+  # app-level metric available, so CPU has to stay — but the target is 90, not
+  # the more usual 70. Starting a pod costs more CPU than a pod requests (350m),
+  # so a 70% target is tripped by pods merely booting, which makes the HPA scale
+  # up in response to its own scale-up. manifests/monitoring/php-fpm-metrics.yaml
+  # replaces this with PHP-FPM worker saturation, which has no such feedback loop.
   metrics:
     - type: Resource
       resource:
         name: cpu
         target:
           type: Utilization
-          averageUtilization: 70
+          averageUtilization: 90
     - type: Resource
       resource:
         name: memory

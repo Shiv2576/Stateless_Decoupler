@@ -1,0 +1,46 @@
+# Helm values for prometheus-adapter — the bridge that turns a Prometheus
+# series into a metric the HorizontalPodAutoscaler can actually read.
+#
+# Without this, custom.metrics.k8s.io doesn't exist as an API and an HPA
+# referencing a Pods metric just reports "unable to fetch metrics".
+#
+# Install:
+#   helm upgrade --install prometheus-adapter \
+#     prometheus-community/prometheus-adapter \
+#     -n monitoring -f configs/grafana/prometheus-adapter-values.yaml
+
+prometheus:
+  url: http://monitoring-kube-prometheus-prometheus.monitoring.svc
+  port: 9090
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 200m
+    memory: 192Mi
+
+rules:
+  # The chart's stock rules expose a large number of container metrics that
+  # this project doesn't use, and each one costs a Prometheus query on every
+  # adapter sync. Only the PHP-FPM metric is needed.
+  default: false
+
+  custom:
+    # phpfpm_worker_utilization_ratio is a recording rule defined in
+    # manifests/monitoring/php-fpm-metrics.yaml — already the ratio of active
+    # workers to the pod's computed pm.max_children, so no further math here.
+    - seriesQuery: 'phpfpm_worker_utilization_ratio{namespace!="",pod!=""}'
+      resources:
+        overrides:
+          namespace:
+            resource: namespace
+          pod:
+            resource: pod
+      name:
+        as: "phpfpm_worker_utilization"
+      # Averaged over the scrape window rather than read as a raw instant value:
+      # PHP-FPM worker counts are spiky at sub-second resolution, and feeding
+      # that jitter straight to the HPA causes replica flapping.
+      metricsQuery: 'avg_over_time(<<.Series>>{<<.LabelMatchers>>}[1m])'

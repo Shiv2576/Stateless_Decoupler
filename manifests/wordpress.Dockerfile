@@ -55,10 +55,41 @@ RUN composer init --no-interaction --working-dir=/var/www/html --name="stateless
 
 COPY mu-plugins/s3-uploads-minio.php wp-content/mu-plugins/s3-uploads-minio.php
 COPY mu-plugins/disable-password-strength.php wp-content/mu-plugins/disable-password-strength.php
+# Replaces WooCommerce's MySQL-backed session store with a Redis-backed one, so
+# cart/session state leaves the database entirely.
+COPY mu-plugins/wc-redis-sessions.php wp-content/mu-plugins/wc-redis-sessions.php
 
 RUN chown -R www-data:www-data wp-content vendor composer.json composer.lock
 
 # Exposes PHP-FPM's built-in status page (active/idle workers, max children
 # reached) for the k6 dashboard to read per-pod concurrency — paired with the
-# /fpm-status nginx location in wordpress-config.yaml.
+# /fpm-status nginx location in wordpress-config.yaml. Also scraped over
+# FastCGI by the php-fpm-exporter sidecar to feed the autoscaling metric.
 RUN echo "pm.status_path = /status" >> /usr/local/etc/php-fpm.d/www.conf
+
+# nginx lives in this image rather than a sidecar. As a sidecar it had no
+# WordPress files of its own, which forced an initContainer to copy ~12k files
+# (212MB of core + WooCommerce + AWS SDK) into a shared emptyDir on every single
+# pod start — pure latency on every scale-out event. Serving them straight from
+# the image layer removes the copy, the emptyDir and the initContainer entirely.
+RUN apk add --no-cache nginx \
+  # Workers run as www-data so they can read the WordPress tree, which is
+  # www-data-owned; the stock package runs them as the nginx user.
+  && sed -i 's/^user[[:space:]]\+nginx;/user www-data;/' /etc/nginx/nginx.conf \
+  && chown -R www-data:www-data /var/lib/nginx \
+  # Alpine's package writes logs to real files, unlike the nginx:alpine image
+  # which symlinks them. Without this `kubectl logs` shows nothing, which also
+  # breaks identifying which pod served a request.
+  && ln -sf /dev/stdout /var/log/nginx/access.log \
+  && ln -sf /dev/stderr /var/log/nginx/error.log
+
+# Sizes pm.max_children from the container's memory limit at startup rather
+# than shipping the image default (5) regardless of how much memory the pod
+# actually gets, then hands off to the two-process launcher.
+COPY fpm-autotune.sh /usr/local/bin/fpm-autotune.sh
+COPY start-services.sh /usr/local/bin/start-services.sh
+RUN chmod +x /usr/local/bin/fpm-autotune.sh /usr/local/bin/start-services.sh
+
+EXPOSE 80 9000
+ENTRYPOINT ["/usr/local/bin/fpm-autotune.sh"]
+CMD ["start-services.sh"]

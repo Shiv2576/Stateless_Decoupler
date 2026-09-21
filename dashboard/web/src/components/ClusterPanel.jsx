@@ -17,10 +17,29 @@ function WorkerBar({ active, max }) {
   );
 }
 
-export default function ClusterPanel() {
+export default function ClusterPanel({ onStats }) {
   const [stats, setStats] = useState(null);
   const [connError, setConnError] = useState('');
+  const [deleting, setDeleting] = useState('');
   const wsRef = useRef(null);
+
+  async function deletePod(name) {
+    setDeleting(name);
+    try {
+      const res = await fetch('/api/cluster/pods/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pod: name }),
+      });
+      if (!res.ok) setConnError((await res.json()).error || 'Delete failed');
+    } catch (e) {
+      setConnError(e.message);
+    } finally {
+      // The pod grid refreshes on its own poll; clearing here just re-enables
+      // the button if the same pod is somehow still listed.
+      setTimeout(() => setDeleting(''), 2000);
+    }
+  }
 
   useEffect(() => {
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
@@ -32,6 +51,7 @@ export default function ClusterPanel() {
       if (msg.type === 'cluster-stats') {
         setConnError('');
         setStats(msg);
+        onStats?.(msg);
       } else if (msg.type === 'error') {
         setConnError(msg.message);
       }
@@ -63,6 +83,14 @@ export default function ClusterPanel() {
                 <span className={`status-pill ${pod.ready ? 'passed' : 'failed'}`}>
                   {pod.ready ? 'ready' : pod.phase}
                 </span>
+                <button
+                  className="btn btn-danger btn-sm"
+                  title="Delete this pod — the store keeps serving from the others"
+                  onClick={() => deletePod(pod.name)}
+                  disabled={deleting === pod.name}
+                >
+                  {deleting === pod.name ? '…' : 'kill'}
+                </button>
               </div>
               <div className="pod-metric-row">
                 <span>CPU</span><span>{pod.cpu ?? '—'}</span>
@@ -79,7 +107,7 @@ export default function ClusterPanel() {
               </div>
               <WorkerBar active={fpm?.active ?? null} max={fpm?.maxChildren ?? null} />
               {fpm?.maxChildrenReached && (
-                <div className="pod-warning">max children reached — requests are queuing</div>
+                <div className="pod-warning"></div>
               )}
             </div>
           );
@@ -90,16 +118,16 @@ export default function ClusterPanel() {
         <div className="cluster-summary-tile">
           <div className="label">Cluster max concurrent PHP requests</div>
           <div className="value">{stats.phpFpm.clusterMaxConcurrent ?? '—'}</div>
-          <div className="sub">pm.max_children × {stats.pods.length} pods</div>
+          <div className="sub">pm.max_children summed over {stats.pods.length} pods</div>
         </div>
         <div className="cluster-summary-tile">
           <div className="label">Redis connected clients</div>
           <div className="value">{stats.redis.connectedClients ?? '—'}</div>
         </div>
         <div className="cluster-summary-tile">
-          <div className="label">Redis active sessions</div>
+          <div className="label">Redis carts / sessions</div>
           <div className="value">{stats.redis.activeSessions ?? '—'}</div>
-          <div className="sub">PHPREDIS_SESSION:* keys</div>
+          <div className="sub">wc_session:* keys</div>
         </div>
       </div>
     </div>

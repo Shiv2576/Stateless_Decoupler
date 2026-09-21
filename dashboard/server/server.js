@@ -7,7 +7,7 @@ import { readdirSync, existsSync, openSync, readSync, closeSync, mkdtempSync } f
 import { join, basename } from 'path';
 import { tmpdir } from 'os';
 import { randomUUID } from 'crypto';
-import { getClusterStats } from './cluster.js';
+import { getClusterStats, scaleDeployment, deletePod, deleteAllPods, getStoreInfo } from './cluster.js';
 
 const TESTS_DIR = join(import.meta.dirname, '..', '..', 'configs', 'k6', 'tests');
 const PORT = process.env.PORT || 4000;
@@ -70,6 +70,62 @@ app.get('/api/cluster/stats', async (_req, res) => {
   }
 });
 
+app.post('/api/cluster/scale', async (req, res) => {
+  try {
+    res.json(await scaleDeployment(req.body?.replicas));
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.post('/api/cluster/pods/delete', async (req, res) => {
+  try {
+    res.json(await deletePod(String(req.body?.pod || '')));
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.post('/api/cluster/pods/delete-all', async (_req, res) => {
+  try {
+    res.json(await deleteAllPods());
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/store', async (_req, res) => {
+  try {
+    res.json(await getStoreInfo());
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/store/seed', (_req, res) => {
+  const script = join(import.meta.dirname, '..', '..', 'scripts', 'seed-store.sh');
+  if (!existsSync(script)) {
+    return res.status(500).json({ error: 'seed-store.sh not found' });
+  }
+
+  // Seeding generates images and pushes them to MinIO, so it can take longer
+  // than a browser is willing to wait on a hung request — bound it explicitly.
+  const proc = spawn('bash', [script], { timeout: 180000 });
+  let out = '';
+  let err = '';
+  proc.stdout.on('data', (c) => { out += c; });
+  proc.stderr.on('data', (c) => { err += c; });
+  proc.on('error', (e) => res.status(500).json({ error: e.message }));
+  proc.on('close', (code) => {
+    if (res.headersSent) return;
+    if (code === 0) {
+      res.json({ ok: true, output: out.trim().split('\n').slice(-8).join('\n') });
+    } else {
+      res.status(500).json({ error: (err || out).trim().split('\n').slice(-5).join('\n') });
+    }
+  });
+});
+
 const server = createServer(app);
 
 // Both WebSocketServers use noServer mode and share one manual 'upgrade'
@@ -97,8 +153,13 @@ server.on('upgrade', (req, socket, head) => {
 
 clusterWss.on('connection', (ws) => {
   let cancelled = false;
+  let inFlight = false;
   const tick = async () => {
-    if (cancelled) return;
+    // Under load a poll can take longer than the interval. Without this guard
+    // ticks overlap and queue up kubectl processes, which makes the very
+    // contention that slowed things down worse.
+    if (cancelled || inFlight) return;
+    inFlight = true;
     try {
       const stats = await getClusterStats();
       if (!cancelled && ws.readyState === ws.OPEN) {
@@ -108,6 +169,8 @@ clusterWss.on('connection', (ws) => {
       if (!cancelled && ws.readyState === ws.OPEN) {
         ws.send(JSON.stringify({ type: 'error', message: err.message }));
       }
+    } finally {
+      inFlight = false;
     }
   };
   tick();

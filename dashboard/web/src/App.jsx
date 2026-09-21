@@ -3,6 +3,7 @@ import TestSelector from './components/TestSelector.jsx';
 import StatTile from './components/StatTile.jsx';
 import MetricChart from './components/MetricChart.jsx';
 import ClusterPanel from './components/ClusterPanel.jsx';
+import StoreControls from './components/StoreControls.jsx';
 
 function percentile(sortedArr, p) {
   if (sortedArr.length === 0) return 0;
@@ -20,6 +21,8 @@ export default function App() {
   });
   const [summary, setSummary] = useState('');
   const [error, setError] = useState('');
+  const [desiredReplicas, setDesiredReplicas] = useState(null);
+  const [minReplicas, setMinReplicas] = useState(null);
 
   const bucketsRef = useRef(new Map());
   const totalsRef = useRef({ requests: 0, checksTotal: 0, checksSucceeded: 0, durationSumMs: 0, durationCount: 0 });
@@ -199,7 +202,14 @@ export default function App() {
         <StatTile label="Avg request time" value={`${totals.avgRequestTimeSeconds.toFixed(3)}s`} />
       </div>
 
-      <ClusterPanel />
+      <StoreControls desiredReplicas={desiredReplicas} minReplicas={minReplicas} />
+
+      <ClusterPanel
+        onStats={(s) => {
+          setDesiredReplicas(s.desiredReplicas ?? null);
+          setMinReplicas(s.minReplicas ?? null);
+        }}
+      />
 
       <MetricChart
         title="Virtual users"

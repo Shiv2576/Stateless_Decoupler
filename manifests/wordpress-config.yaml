@@ -100,6 +100,14 @@ data:
         root /var/www/html;
         index index.php index.html;
 
+        # Issue relative redirects instead of absolute ones. nginx builds
+        # absolute redirects from server_name plus the port it listens on (80),
+        # so adding a trailing slash to /wp-admin produced
+        # "http://localhost/wp-admin/" — silently dropping the :8080 the browser
+        # actually came in on, via the k3d host port mapping. A relative
+        # Location header lets the browser keep the original host and port.
+        absolute_redirect off;
+
         # Logging
         access_log /var/log/nginx/access.log;
         error_log /var/log/nginx/error.log;

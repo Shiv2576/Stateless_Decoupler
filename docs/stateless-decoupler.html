@@ -1,0 +1,792 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Stateless Decoupler — Architecture &amp; Demo Guide</title>
+<style>
+  @page { size: A4; margin: 18mm 16mm; }
+
+  :root {
+    --ink:      #14181f;
+    --muted:    #5b6472;
+    --rule:     #d9dee6;
+    --accent:   #1f4e79;
+    --accent-bg:#eef4fa;
+    --warn-bg:  #fdf4e7;
+    --warn-br:  #d98324;
+    --good-bg:  #edf7ef;
+    --good-br:  #2e7d4f;
+    --code-bg:  #f5f7fa;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, "Helvetica Neue", Arial, sans-serif;
+    color: var(--ink);
+    font-size: 10.2pt;
+    line-height: 1.55;
+    margin: 0;
+  }
+
+  h1, h2, h3, h4 { color: var(--accent); line-height: 1.25; margin: 0 0 .4em; }
+  h1 { font-size: 26pt; letter-spacing: -.4pt; }
+  h2 {
+    font-size: 15pt; margin-top: 1.9em;
+    padding-bottom: .25em; border-bottom: 2px solid var(--rule);
+    page-break-after: avoid;
+  }
+  h3 { font-size: 11.6pt; margin-top: 1.5em; page-break-after: avoid; }
+  h4 { font-size: 10.4pt; margin-top: 1.2em; color: var(--ink); page-break-after: avoid; }
+  p  { margin: 0 0 .75em; }
+
+  ul, ol { margin: 0 0 .8em; padding-left: 1.3em; }
+  li { margin-bottom: .3em; }
+
+  code {
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+    font-size: .88em;
+    background: var(--code-bg);
+    padding: .1em .32em;
+    border-radius: 3px;
+  }
+
+  pre {
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+    font-size: 8.3pt;
+    line-height: 1.45;
+    background: var(--code-bg);
+    border: 1px solid var(--rule);
+    border-left: 3px solid var(--accent);
+    border-radius: 4px;
+    padding: .7em .9em;
+    /* pre-wrap rather than pre: in print there is no horizontal scroll, so an
+       over-long command would be silently clipped off the page edge. */
+    white-space: pre-wrap;
+    overflow-wrap: break-word;
+    page-break-inside: avoid;
+    margin: 0 0 .9em;
+  }
+  pre code { background: none; padding: 0; font-size: 1em; }
+
+  table {
+    width: 100%; border-collapse: collapse;
+    margin: 0 0 1em; font-size: 9.3pt;
+    page-break-inside: avoid;
+  }
+  th, td { text-align: left; padding: .45em .6em; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  th { background: var(--accent-bg); color: var(--accent); font-weight: 600; }
+  td code { font-size: .92em; }
+
+  .cover { page-break-after: always; padding-top: 32mm; }
+  .cover .sub { font-size: 13pt; color: var(--muted); margin-top: -.2em; }
+  .cover .meta { margin-top: 20mm; font-size: 9.5pt; color: var(--muted); border-top: 1px solid var(--rule); padding-top: 1em; }
+  .cover .tagline {
+    margin-top: 10mm; padding: 1em 1.2em;
+    background: var(--accent-bg); border-left: 3px solid var(--accent);
+    border-radius: 4px; font-size: 11pt;
+  }
+
+  .note, .warn, .good {
+    padding: .7em .95em; border-radius: 4px; margin: 0 0 1em;
+    page-break-inside: avoid; font-size: 9.6pt;
+  }
+  .note { background: var(--accent-bg); border-left: 3px solid var(--accent); }
+  .warn { background: var(--warn-bg);   border-left: 3px solid var(--warn-br); }
+  .good { background: var(--good-bg);   border-left: 3px solid var(--good-br); }
+  .note p:last-child, .warn p:last-child, .good p:last-child { margin-bottom: 0; }
+
+  .label { font-weight: 700; text-transform: uppercase; letter-spacing: .4pt; font-size: 8.2pt; display: block; margin-bottom: .3em; }
+  .note .label { color: var(--accent); }
+  .warn .label { color: var(--warn-br); }
+  .good .label { color: var(--good-br); }
+
+  .say {
+    border: 1px dashed var(--rule); background: #fcfcfd;
+    padding: .7em .95em; border-radius: 4px; margin: 0 0 1em;
+    font-style: italic; color: #333; page-break-inside: avoid; font-size: 9.6pt;
+  }
+  .say .label { font-style: normal; color: var(--muted); }
+
+  .step {
+    background: var(--accent); color: #fff;
+    display: inline-block; width: 1.5em; height: 1.5em;
+    border-radius: 50%; text-align: center; line-height: 1.5em;
+    font-size: .82em; font-weight: 700; margin-right: .4em;
+  }
+  .break { page-break-before: always; }
+  .dim { color: var(--muted); }
+  .num { font-variant-numeric: tabular-nums; }
+</style>
+</head>
+<body>
+
+<!-- ───────────────────────────── COVER ───────────────────────────── -->
+<div class="cover">
+  <h1>Stateless Decoupler</h1>
+  <div class="sub">Making a WordPress/WooCommerce store horizontally scalable on Kubernetes</div>
+
+  <div class="tagline">
+    Strip every stateful component out of the WordPress pod so the application tier becomes
+    disposable — then let Kubernetes scale it on a signal that reflects what users actually feel.
+  </div>
+
+  <div class="meta">
+    <strong>Architecture &amp; End-to-End Demo Guide</strong><br>
+    Local stack: k3d / K3s &middot; WordPress 6.6 &middot; PHP 8.2-FPM &middot; MySQL 8 &middot; Redis 7.2 &middot; MinIO<br>
+    Load generation: k6 &middot; Observability: Prometheus, Grafana, custom React dashboard<br>
+    <span class="dim">All figures in this document are from measured runs on this stack, not estimates.</span>
+  </div>
+</div>
+
+<!-- ───────────────────────── THE PROBLEM ───────────────────────── -->
+<h2>1. The problem, and why I built this</h2>
+
+<p>
+  Most WordPress and WooCommerce store owners run on shared hosting. When a product goes viral or
+  an ad lands, they cannot simply provision dedicated infrastructure in the minutes that matter —
+  it is not operationally or financially feasible for them. The traffic arrives, the store slows
+  to a crawl or falls over, and the spike converts into lost revenue instead of sales.
+</p>
+
+<p>
+  The usual defence is to over-provision: pay year-round for a server sized to a spike that happens
+  three times a year. That is expensive and still fails if the spike is bigger than the guess.
+</p>
+
+<p>
+  The real blocker is that a stock WordPress install is <strong>stateful</strong>. Sessions, uploaded
+  media, and store data all live on the same machine that renders the page. That coupling makes
+  horizontal scaling unsafe: add a server and it cannot see the media uploaded to its sibling;
+  remove one and you destroy whatever was sitting on its disk. You cannot autoscale something you
+  cannot safely duplicate or destroy.
+</p>
+
+<p>
+  So I stripped the state out. Media moved to MinIO (S3-compatible object storage), the store's
+  data moved to MySQL, and Redis took over caching, each running as its own service in the cluster
+  rather than living inside the WordPress pod. What remains in the pod is pure computation.
+</p>
+
+<div class="good">
+  <span class="label">The outcome</span>
+  Every store pod becomes a highly disposable unit. It can be multiplied during a spike and
+  removed once it passes — so infrastructure is sized to <em>current</em> demand rather than to the
+  worst case, and no user loses their session, cart, or uploads when a pod disappears.
+</div>
+
+<!-- ───────────────────────── CORE IDEA ───────────────────────── -->
+<h2>2. Core idea: separate computation from state</h2>
+
+<p>
+  Everything follows from one rule: <strong>a WordPress pod is allowed to hold nothing that cannot
+  be thrown away.</strong> If that holds, Kubernetes is free to create and destroy pods at will,
+  which is precisely what autoscaling requires.
+</p>
+
+<table>
+  <tr><th style="width:26%">State</th><th style="width:20%">Now lives in</th><th>Mechanism</th></tr>
+  <tr>
+    <td>Uploaded media</td><td>MinIO (S3)</td>
+    <td><code>humanmade/s3-uploads</code>, pointed at MinIO by a must-use plugin that overrides the
+        S3 client endpoint</td>
+  </tr>
+  <tr>
+    <td>Object cache</td><td>Redis</td>
+    <td><code>redis-cache</code> plugin installing the <code>object-cache.php</code> drop-in</td>
+  </tr>
+  <tr>
+    <td>Shopping session / cart</td><td>Redis</td>
+    <td>A custom <code>WC_Session_Handler_Redis</code> swapped in via WooCommerce's
+        <code>woocommerce_session_handler</code> filter — see §4</td>
+  </tr>
+  <tr>
+    <td>Products, orders, users</td><td>MySQL</td>
+    <td>Shared database, single source of truth for every replica</td>
+  </tr>
+  <tr>
+    <td>Login / authentication</td><td>Nothing (client-side)</td>
+    <td>Signed cookies validated against salts shared by every pod via ConfigMap</td>
+  </tr>
+</table>
+
+<div class="note">
+  <span class="label">One nuance worth stating precisely</span>
+  <p>
+    "Session management" in WordPress means two different things, and conflating them invites an
+    awkward follow-up question:
+  </p>
+  <ul style="margin-bottom:.4em">
+    <li><strong>Login state</strong> is not a server-side session at all. WordPress core
+        authenticates with <strong>signed cookies</strong> validated against salts that every pod
+        shares, so there is nothing to store and nothing to move.</li>
+    <li><strong>The shopping session</strong> — cart contents, applied coupons, customer details —
+        <em>is</em> real server-side state. WooCommerce stores it in MySQL by default; here it has
+        been moved to <strong>Redis</strong>.</li>
+  </ul>
+  <p>
+    PHP's native <code>$_SESSION</code> mechanism is configured to use Redis too, but nothing in
+    this stack calls <code>session_start()</code>, so it holds no keys. The state that actually
+    matters commercially is the cart, and that is in Redis.
+  </p>
+</div>
+
+<div class="good">
+  <span class="label">The property that makes all of this work</span>
+  <strong>The pod holds no user state at all</strong> — not on disk, not in memory, nowhere. Login
+  is a signed cookie, the cart is in Redis, media is in MinIO, and everything durable is in MySQL.
+  That is precisely why a pod can be deleted mid-session without anyone noticing, which Demo 2
+  proves live by destroying every pod while a cart is open.
+</div>
+
+<!-- ───────────────────────── ARCHITECTURE ───────────────────────── -->
+<h2 class="break">3. Architecture</h2>
+
+<pre><code>                          Browser / k6  →  http://localhost:8080
+                                       │
+                            ┌──────────┴───────────┐
+                            │  Traefik Ingress     │
+                            │  /wordpress → MinIO  │   media served directly
+                            │  /          → app    │   from object storage
+                            └──────────┬───────────┘
+                                       │
+                 ┌─────────────────────┴─────────────────────┐
+                 │   wordpress Deployment   (HPA: 2 → 5 pods) │
+                 │  ┌──────────────────────┐ ┌─────────────┐  │
+                 │  │  nginx :80           │ │  php-fpm    │  │
+                 │  │     ↓ FastCGI        │←│  exporter   │  │
+                 │  │  PHP-FPM :9000       │ │    :9253    │  │
+                 │  │  (one container —    │ └──────┬──────┘  │
+                 │  │   files from image)  │        │         │
+                 │  └──────────┬───────────┘        │         │
+                 └─────────────┼──────────────────┼─┼─────────┘
+                                     │               │ scraped
+          ┌──────────────┬───────────┴──────┐        ▼
+          ▼              ▼                  ▼   ┌──────────────┐
+   ┌────────────┐ ┌────────────┐ ┌────────────┐ │  Prometheus  │
+   │   MySQL    │ │   Redis    │ │   MinIO    │ │      +       │
+   │ StatefulSet│ │ object     │ │ S3 media   │ │   Adapter    │
+   │ + PVC      │ │ cache      │ │ + PVC      │ └──────┬───────┘
+   │ store data │ │            │ │            │        │ custom metric
+   └────────────┘ └────────────┘ └────────────┘        ▼
+                                                 ┌──────────────┐
+                                                 │     HPA      │
+                                                 └──────────────┘</code></pre>
+
+<h3>Pod composition</h3>
+<p>Each WordPress pod runs two containers — no init container, no shared volume:</p>
+<ul>
+  <li><strong>wordpress</strong> — nginx and PHP-FPM together, both reading WordPress straight from
+      the image layer. nginx serves static assets and proxies PHP over FastCGI; PHP-FPM sizes its
+      own worker pool at startup. See §8 for why these were merged.</li>
+  <li><strong>php-fpm-exporter</strong> — reads the FPM status page over FastCGI and republishes it
+      as Prometheus metrics. This is what makes app-aware autoscaling possible.</li>
+</ul>
+
+<h3>Why MySQL, Redis and MinIO are single replicas</h3>
+<p>
+  This is deliberate, not an oversight. They are the fixed backing services; the whole point is
+  that the <em>application tier</em> is what scales. Collapsing statelessness down to just the app
+  tier is the experiment. In production each of these would need its own HA story — and MySQL is
+  the honest ceiling of this design, since every replica opens its own connection pool against one
+  server.
+</p>
+
+<!-- ───────────────────────── SESSIONS ───────────────────────── -->
+<h2 class="break">4. Moving the shopping session out of MySQL</h2>
+
+<p>
+  WooCommerce ships <code>WC_Session_Handler</code>, which writes every shopper's cart to the
+  <code>wp_woocommerce_sessions</code> MySQL table. Redis sits in front of it only as an object
+  cache, so MySQL stays authoritative and absorbs a write on <em>every cart mutation, from every
+  replica, against a single database</em>. On a store that scales its application tier to five pods,
+  that is exactly the wrong thing to centralise: the tier scales out, and all of it converges on one
+  database connection pool.
+</p>
+
+<p>
+  WooCommerce exposes a <code>woocommerce_session_handler</code> filter that swaps the storage class
+  outright, so this replaces the backend rather than layering another cache over it:
+</p>
+
+<pre><code>add_filter( 'woocommerce_session_handler', function ( $handler_class ) {
+    class WC_Session_Handler_Redis extends WC_Session_Handler {
+        // get_session() / save_data() / delete_session() /
+        // update_session_timestamp() / cleanup_sessions()
+    }
+    return 'WC_Session_Handler_Redis';
+} );</code></pre>
+
+<p>Implemented in <code>manifests/mu-plugins/wc-redis-sessions.php</code>. Design decisions worth defending:</p>
+
+<table>
+  <tr><th style="width:30%">Decision</th><th>Reasoning</th></tr>
+  <tr>
+    <td>Keys as <code>wc_session:&lt;id&gt;</code> with a TTL</td>
+    <td>Expiry becomes Redis's job. WooCommerce's scheduled <code>cleanup_sessions()</code> sweep
+        becomes a no-op, removing a recurring bulk <code>DELETE</code> against MySQL.</td>
+  </tr>
+  <tr>
+    <td>Falls back to the stock MySQL handler on any Redis error</td>
+    <td>Losing Redis should mean slower carts, not a store that cannot take orders. Every overridden
+        method delegates to <code>parent::</code> if the connection or command fails.</td>
+  </tr>
+  <tr>
+    <td><code>pconnect()</code> rather than <code>connect()</code></td>
+    <td>The socket persists across requests handled by the same PHP-FPM worker; otherwise every cart
+        operation pays a fresh TCP handshake.</td>
+  </tr>
+  <tr>
+    <td>Class declared inside the filter callback</td>
+    <td>mu-plugins load long before WooCommerce, so referencing <code>WC_Session_Handler</code> at
+        file scope would be a fatal error. Declaring it inside the callback also lets
+        <code>class_exists()</code> trigger WooCommerce's autoloader for the parent.</td>
+  </tr>
+</table>
+
+<div class="good">
+  <span class="label">Verified on this stack</span>
+  <p>After adding one product to a cart:</p>
+  <pre style="margin:.5em 0 .4em"><code>session handler class        : WC_Session_Handler_Redis
+wc_session:* keys in Redis   : 1      (was 0)
+rows in MySQL sessions table : 2      (unchanged — no write occurred)
+key TTL                      : 172783s  (~48h, WooCommerce's own expiration)
+stored payload               : a:8:{s:4:"cart";...product_id;i:16...}</code></pre>
+  <p style="margin-bottom:0">
+    Every WordPress pod was then deleted simultaneously. The replacement pods served the identical
+    cookie and the cart still contained its item.
+  </p>
+</div>
+
+<!-- ───────────────────────── AUTOSCALING ───────────────────────── -->
+<h2 class="break">5. Autoscaling on a signal that means something</h2>
+
+<p>
+  The default way to autoscale is CPU, and it is the naive choice for PHP-FPM. Each PHP-FPM worker
+  handles exactly one request at a time. When every worker is occupied, further requests sit in the
+  listen backlog and users wait — <strong>whether or not those workers are burning CPU</strong>. A
+  pod blocked on a slow database or a stalled object store is 100&percnt; saturated at near-zero CPU,
+  and a CPU-based HPA sees an idle pod and does nothing.
+</p>
+
+<div class="note">
+  <span class="label">This is not hypothetical — it happened on this stack</span>
+  When MinIO was unreachable, every request that touched media blocked on a dead endpoint.
+  Measured result: <strong>27&nbsp;second page loads while CPU sat at 10&percnt;</strong> and the
+  HPA took no action. CPU was not merely slow to react; it was blind.
+</div>
+
+<p>So the autoscaling signal was moved up the stack to worker saturation:</p>
+
+<pre><code>PHP-FPM status  →  php-fpm-exporter (sidecar)
+                →  Prometheus (ServiceMonitor, 10s scrape)
+                →  recording rule: phpfpm_worker_utilization_ratio
+                →  Prometheus Adapter
+                →  custom.metrics.k8s.io  →  HorizontalPodAutoscaler</code></pre>
+
+<p>The HPA now evaluates three metrics and takes the largest resulting replica count:</p>
+
+<table>
+  <tr><th style="width:42%">Metric</th><th style="width:18%">Target</th><th>Role</th></tr>
+  <tr><td><code>phpfpm_worker_utilization</code></td><td>750m (75&percnt;)</td>
+      <td>Primary — reflects user-facing capacity</td></tr>
+  <tr><td>CPU</td><td>70&percnt;</td><td>Backstop</td></tr>
+  <tr><td>Memory</td><td>80&percnt;</td><td>Backstop</td></tr>
+</table>
+
+<p>
+  The 75&percnt; threshold is deliberate rather than 100&percnt;: a new pod takes roughly 40 seconds
+  to start serving, so scaling must begin while headroom still exists.
+</p>
+
+<h3>Sizing the worker pool from the memory limit</h3>
+<p>
+  Hardcoding <code>pm.max_children</code> is a classic PHP-FPM failure mode. Set it too high for the
+  memory available and the pool forks past the cgroup limit under load, so the kernel OOM-kills the
+  container mid-request instead of PHP-FPM gracefully queuing. Each pod therefore computes its own
+  pool size at startup from its actual memory limit:
+</p>
+
+<pre><code>max_children = (memory_limit − reserved_overhead) / avg_worker_rss
+             = (768Mi − 128Mi) / 48Mi
+             = 13 workers</code></pre>
+
+<div class="good">
+  <span class="label">Measured effect</span>
+  The stock image ships <code>pm.max_children = 5</code> regardless of how much memory the pod is
+  given. Deriving it correctly yields <strong>9 workers — 80&percnt; more concurrency per pod</strong>,
+  with no extra infrastructure. Verified degradation: a 1Gi pod computes 20 workers; a starved
+  128Mi pod computes 1 rather than a value that would guarantee an OOM kill.
+</div>
+
+<p>
+  The same formula is mirrored in the Prometheus recording rule, so the autoscaling metric's
+  denominator can never drift from the pool size the pod actually configured.
+</p>
+
+<!-- ───────────────────────── DEMO ───────────────────────── -->
+<h2 class="break">6. End-to-end showcase</h2>
+
+<p>
+  Three demos, in order. The first shows the system scaling; the second proves <em>why</em> scaling
+  is safe; the third is the failure mode that justifies the whole metrics pipeline. Every step below
+  has been executed on this stack.
+</p>
+
+<h3>Preparation (before the audience is watching)</h3>
+
+<pre><code># 1. Bring the stack up (idempotent; safe to re-run)
+./scripts/bootstrap.sh
+
+# 2. Enable app-aware autoscaling
+./manifests/monitoring/setup-all.sh
+helm upgrade --install prometheus-adapter \
+  prometheus-community/prometheus-adapter \
+  -n monitoring -f configs/grafana/prometheus-adapter-values.yaml --wait
+kubectl apply -f manifests/monitoring/php-fpm-metrics.yaml
+
+# 3. Confirm the custom metric is live (must print a value, not an error)
+kubectl get --raw \
+  "/apis/custom.metrics.k8s.io/v1beta1/namespaces/wordpress/pods/*/phpfpm_worker_utilization"
+
+# 4. Start the dashboard
+cd dashboard/server &amp;&amp; npm install &amp;&amp; node server.js     # port 4000
+cd dashboard/web    &amp;&amp; npm install &amp;&amp; npm run dev      # port 5173</code></pre>
+
+<p>Open <code>http://localhost:5173</code>, and keep a terminal visible running:</p>
+<pre><code>watch -n2 kubectl get hpa,pods -n wordpress -l app=wordpress</code></pre>
+
+<div class="warn">
+  <span class="label">Two things that will embarrass you if unchecked</span>
+  <p>
+    <strong>Start at 2 pods.</strong> If a previous run left the deployment at 5, the scale-out has
+    nothing to show. Scale-down takes 5 minutes (Kubernetes' default stabilization window), so wait
+    it out before presenting.
+  </p>
+  <p>
+    <strong>Start tests from the dashboard's Run test button</strong>, not from a terminal. The
+    charts only plot runs the dashboard itself launches; a terminal-launched k6 writes to its own
+    file and the graphs sit at "Waiting for data…".
+  </p>
+</div>
+
+<h3><span class="step">1</span>Demo 1 — Autoscaling under a traffic spike</h3>
+
+<p>
+  In the dashboard's cluster panel, point out <strong>Cluster max concurrent PHP requests</strong>.
+  At two pods it reads 26 — that is <code>pm.max_children</code> (13) × 2 pods, and it is the honest
+  ceiling of the application tier.
+</p>
+
+<div class="say">
+  <span class="label">What to say</span>
+  "Right now the store can process twenty-six PHP requests simultaneously. Everything beyond that
+  queues. I'm about to send forty concurrent users at it — well past what it can absorb."
+</div>
+
+<p>Select <code>wordpress-scale-out.js</code> and press <strong>Run test</strong>. Then narrate:</p>
+
+<table>
+  <tr><th style="width:16%">Elapsed</th><th>What happens on screen</th></tr>
+  <tr><td class="num">0–30s</td><td>VUs ramp to 40; latency climbs as requests queue behind busy workers</td></tr>
+  <tr><td class="num">~40s</td><td>Worker utilization crosses 750m; the HPA raises its desired replica count</td></tr>
+  <tr><td class="num">~60s</td><td>New pods appear as <code>Init:0/1</code> — scale-out has begun, unprompted</td></tr>
+  <tr><td class="num">~100s</td><td>Pods reach <code>2/2 Running</code>; the capacity tile climbs</td></tr>
+  <tr><td class="num">~140s</td><td>Five pods running; capacity tile reads 65</td></tr>
+  <tr><td class="num">140s+</td><td><strong>Latency falls, throughput rises, error rate stays flat</strong></td></tr>
+</table>
+
+<div class="say">
+  <span class="label">The closer</span>
+  "Nobody touched anything. The application reported it was saturated, Kubernetes added capacity,
+  and latency recovered. When traffic drops it will release those pods again — so this store is
+  paying for peak capacity only during the peak."
+</div>
+
+<h3><span class="step">2</span>Demo 2 — The store survives losing the pod you are using</h3>
+
+<p>
+  This is the demo that actually proves decoupling, and it is the most persuasive thing in the
+  project: <strong>log in, then destroy the exact pod that logged you in.</strong>
+</p>
+
+<pre><code># Log in and keep the session cookie
+curl -s -c /tmp/cookies.txt http://localhost:8080/wp-login.php -o /dev/null
+curl -s -b /tmp/cookies.txt -c /tmp/cookies.txt -X POST http://localhost:8080/wp-login.php \
+  --data-urlencode "log=admin"  --data-urlencode "pwd=admin" \
+  --data-urlencode "wp-submit=Log In" --data-urlencode "testcookie=1" \
+  --data-urlencode "redirect_to=http://localhost:8080/wp-admin/" -o /dev/null
+
+# Confirm the session works
+curl -s -b /tmp/cookies.txt http://localhost:8080/wp-admin/ | grep -o "Howdy, admin"
+
+# Identify which pod actually served that login
+for p in $(kubectl get pods -n wordpress -l app=wordpress -o name); do
+  n=$(kubectl logs -n wordpress $p -c nginx --tail=2000 | grep -c 'POST /wp-login.php')
+  echo "$p -> $n"
+done
+
+# Destroy that specific pod
+kubectl delete pod -n wordpress &lt;the-pod-that-served-the-login&gt;
+
+# Same cookie, pod now gone
+curl -s -b /tmp/cookies.txt http://localhost:8080/wp-admin/ | grep -o "Howdy, admin"</code></pre>
+
+<div class="good">
+  <span class="label">Verified result on this stack</span>
+  After deleting the pod that served the login, the identical cookie still returns
+  <strong>HTTP 200</strong> and <strong>"Howdy, admin"</strong>. The session is untouched, a
+  replacement pod joins automatically, and uploaded media still loads because it was never on that
+  pod in the first place.
+</div>
+
+<h4>The stronger version: destroy every pod with a cart open</h4>
+
+<p>
+  Login survival alone can be waved away as "that's just a cookie." The shopping cart cannot — it is
+  genuine server-side state, and it is the thing a store actually loses money on. So put an item in
+  a cart, then delete <em>every</em> WordPress pod at once:
+</p>
+
+<pre><code># Put a product in the cart (use any published product ID)
+curl -s -c /tmp/cart.txt -b /tmp/cart.txt -L \
+  "http://localhost:8080/?add-to-cart=16&amp;quantity=1" -o /dev/null
+
+# Prove the cart now lives in Redis, and that MySQL was never written to
+kubectl exec -n wordpress deploy/redis -- redis-cli --scan --pattern 'wc_session:*'
+kubectl exec -n wordpress mysql-0 -- \
+  mysql -uwpuser -pwppassword wordpress -N -e \
+  'SELECT COUNT(*) FROM wp_woocommerce_sessions;'
+
+# Destroy the entire application tier
+kubectl delete pod -n wordpress -l app=wordpress
+kubectl wait --for=condition=ready pod -l app=wordpress -n wordpress --timeout=300s
+
+# Same cookie, every original pod gone — cart is still there
+curl -s -b /tmp/cart.txt "http://localhost:8080/?wc-ajax=get_refreshed_fragments"</code></pre>
+
+<div class="good">
+  <span class="label">Verified result on this stack</span>
+  Both pods were deleted simultaneously and replaced. The identical cookie returned a cart still
+  containing its item, the Redis key <code>wc_session:t_d7e9ed8c…</code> persisted throughout, and
+  the MySQL sessions table count <strong>never changed</strong> — confirming Redis is the
+  authoritative store rather than a cache in front of the database.
+</div>
+
+<div class="say">
+  <span class="label">What to say</span>
+  "That cart is real server-side state — it is not a cookie. I just deleted every single server
+  running this store, and the shopper's cart is intact, because the cart was never on any of them.
+  This is what makes the autoscaler safe to use: Kubernetes can remove a pod at any moment and
+  nobody loses a sale."
+</div>
+
+<div class="say">
+  <span class="label">What to say</span>
+  "I logged in, and that request was served by this specific pod. I'm now deleting it — not
+  restarting it, deleting it. I'm still logged in. On conventional hosting, destroying that machine
+  would have taken my session and every file uploaded to it. Here it costs nothing, and that's
+  exactly what makes autoscaling safe rather than merely possible."
+</div>
+
+<p>For a stronger version, do this <em>while a load test is running</em> and show the error-rate
+   chart staying flat — surviving pods absorb the traffic because the Service only routes to
+   endpoints that are <code>Ready</code>.</p>
+
+<h3><span class="step">3</span>Demo 3 — Why CPU-based autoscaling is not enough</h3>
+
+<p>
+  Optional, and the most senior-sounding of the three. Break the object store and watch CPU lie:
+</p>
+
+<pre><code>kubectl scale deployment/minio -n wordpress --replicas=0     # simulate a stalled dependency
+curl -o /dev/null -s -w "%{time_total}s\n" http://localhost:8080/
+kubectl get hpa -n wordpress
+kubectl scale deployment/minio -n wordpress --replicas=1     # restore</code></pre>
+
+<div class="say">
+  <span class="label">What to say</span>
+  "Latency just went to about thirty seconds. CPU is near idle, so a CPU-based autoscaler sees a
+  healthy, underutilized cluster and does nothing at all — while every worker is blocked and every
+  user is waiting. That's why this HPA scales on PHP-FPM worker saturation: it's the metric that
+  actually tracks what a user experiences."
+</div>
+
+<!-- ───────────────────────── RESULTS ───────────────────────── -->
+<h2 class="break">7. Measured results</h2>
+
+<p>From an actual run of <code>wordpress-scale-out.js</code> (40 VUs, ~5.5 minutes) on this stack:</p>
+
+<table>
+  <tr><th style="width:52%">Measurement</th><th>Result</th></tr>
+  <tr><td>Checks passed</td><td class="num">1057 / 1057 (100&percnt;)</td></tr>
+  <tr><td>Request failure rate</td><td class="num">0.00&percnt;</td></tr>
+  <tr><td>Replicas</td><td class="num">2 → 5, reaching 5 within ~140s</td></tr>
+  <tr><td>Worker pool per pod</td><td class="num">13 (autotuned, up from 5)</td></tr>
+  <tr><td>Peak worker utilization</td><td class="num">1000m (100&percnt; — fully saturated)</td></tr>
+  <tr><td>Utilization after scale-out completed</td><td class="num">1000m → 407m</td></tr>
+  <tr><td>Homepage latency, MinIO healthy vs. unreachable</td><td class="num">0.26s vs. 27.8s</td></tr>
+  <tr><td>Cart survival across destruction of all pods</td><td class="num">survived</td></tr>
+  <tr><td>MySQL writes for session data after the Redis handler</td><td class="num">0</td></tr>
+</table>
+
+<h3>The detail worth showing</h3>
+<p>During the run, these two samples were recorded fifteen seconds apart:</p>
+
+<pre><code>time     | worker utilization | CPU     | replicas
+11:07:05 |  1000m  (SATURATED)|  65.6%  |    5
+11:07:20 |  1000m  (SATURATED)|  61.2%  |    5</code></pre>
+
+<p>
+  Every PHP-FPM worker was busy — users were queuing — while CPU had fallen <em>below</em> its
+  70&percnt; threshold. A CPU-only autoscaler reads that as "under target, nothing to do." The
+  worker metric is what correctly held the cluster scaled out.
+</p>
+
+<div class="warn">
+  <span class="label">State this honestly if asked</span>
+  In this particular test CPU actually crossed its threshold about 15 seconds <em>before</em> worker
+  utilization did, because rendering WordPress pages is CPU-bound — so both signals saturate
+  together and CPU tipped first. The worker metric's decisive advantage is not speed on CPU-bound
+  work; it is <strong>visibility on I/O-bound work</strong>, where CPU stays flat and never fires at
+  all. Claiming it always reacts first would be wrong, and the data would contradict it.
+</div>
+
+<!-- ───────────────────────── COLD START ───────────────────────── -->
+<h2 class="break">8. Making scale-out fast</h2>
+
+<p>
+  On an autoscaling store, <strong>cold start is the product.</strong> A pod that takes 44 seconds to
+  serve traffic is 44 seconds of the traffic spike absorbed by the pods that were already
+  overloaded. So it was worth measuring precisely rather than guessing.
+</p>
+
+<h3>Measure first — the obvious culprit was not the problem</h3>
+
+<pre><code>scheduled            06:22:35
+init-html starts     06:22:49   ← 14s   sandbox + container creation
+init-html ends       06:22:55   ←  6s   the actual file copy
+containers start     06:22:57
+Ready                06:23:19   ← 22s   readinessProbe initialDelaySeconds: 20
+──────────────────────────────────────
+                                  44s</code></pre>
+
+<p>
+  The initContainer copies 11,947 files totalling 212MB on every pod start, so it looks like the
+  obvious target. It was worth <strong>6 seconds of 44</strong>. The single largest component was
+  <code>initialDelaySeconds: 20</code> — Kubernetes had been told not to even <em>check</em> whether
+  the pod was ready for twenty seconds after it already was.
+</p>
+
+<div class="note">
+  <span class="label">The general lesson</span>
+  A defensive "give it time to boot" delay gets set early, never revisited, and quietly becomes the
+  dominant cost. It is invisible in dashboards because nothing is failing — the pod is simply idle,
+  ready, and not being asked.
+</div>
+
+<h3>Two fixes</h3>
+
+<h4>1. Replace the blind delay with a probe that asks</h4>
+<p>
+  A <code>startupProbe</code> polling once per second gates readiness and liveness until the pod
+  genuinely serves, so a pod that is ready in two seconds is marked ready in two seconds. The probe
+  targets <code>/fpm-status</code> over HTTP, which traverses nginx → FastCGI → PHP-FPM and so
+  proves both processes are up <em>and talking</em> — something an open TCP port does not.
+</p>
+<p>
+  It deliberately does <strong>not</strong> request a WordPress page. Tying readiness to MySQL would
+  mean a brief database blip marks every pod unready simultaneously, turning a slow query into a
+  total outage.
+</p>
+
+<h4>2. Merge nginx and PHP-FPM into one container</h4>
+<p>
+  nginx previously ran as a sidecar with no WordPress files of its own, which is the only reason the
+  initContainer and the shared <code>emptyDir</code> existed at all — 212MB copied per pod, to hand
+  nginx files it could have simply been built with. Putting nginx in the same image removes the
+  copy, the volume and the init container together.
+</p>
+<p>
+  The two processes are started by a short script rather than <code>supervisord</code>, for two
+  reasons. Practically, supervisord is broken on this image (Alpine's python/expat skew). More
+  importantly, a supervisor that restarts a crashed PHP-FPM <em>inside</em> the container hides the
+  failure: the pod reports zero restarts and looks healthy while silently flapping. Kubernetes is
+  already the supervisor, so the script does the opposite — if either process exits, it exits, and
+  the failure surfaces as a container restart. It also forwards <code>SIGTERM</code> as
+  <code>nginx -s quit</code> and PHP-FPM's <code>SIGQUIT</code> so in-flight requests drain.
+</p>
+
+<div class="good">
+  <span class="label">Measured result</span>
+  <pre style="margin:.5em 0 .4em"><code>                        before      after
+scheduled -> Ready        44s         17s      (-61%)
+  container -> Ready      22s          2s      probe fix
+  initContainer            6s          0s      merge
+files copied per pod    11,947          0
+PHP workers per pod          9         13      (merged memory budget)</code></pre>
+  <p style="margin-bottom:0">
+    The remaining 15s is kubelet sandbox creation and container start, which is host-bound — on this
+    single-machine k3d cluster it is largely contention, not application startup.
+  </p>
+</div>
+
+<!-- ───────────────────────── LIMITATIONS ───────────────────────── -->
+<h2 class="break">9. Known limitations and next steps</h2>
+
+<p>This is a local demonstration stack. Being able to name its weaknesses is part of the story.</p>
+
+<table>
+  <tr><th style="width:34%">Limitation</th><th>Detail / what I would do next</th></tr>
+  <tr><td>Secrets in plaintext</td>
+      <td>Credentials sit in manifests and the auth salts are placeholders, which makes cookies
+          cryptographically worthless. Needs generated salts delivered via Kubernetes Secrets.</td></tr>
+  <tr><td>MySQL is the real ceiling</td>
+      <td>Single replica, no backups; every app replica opens its own connection pool against it.
+          Moving cart sessions to Redis (§4) removed a write on every cart mutation, but products,
+          orders and users still converge on one server. Read replicas behind a proxy are the next
+          bottleneck to address.</td></tr>
+  <tr><td>Redis is now a hard dependency for carts</td>
+      <td>With sessions authoritative in Redis, a single Redis replica holds live cart state. The
+          handler falls back to MySQL on connection failure so the store keeps trading, but carts
+          written while Redis was down are not reconciled back. Production needs Redis replication
+          plus AOF, not a single pod.</td></tr>
+  <tr><td>Cold start floor ≈ 15s</td>
+      <td>Addressed in §8 (44s → 17s). What remains is kubelet sandbox creation, which is host-bound.
+          On a real multi-node cluster, pre-pulled images and a smaller image would cut it further —
+          pruning the AWS SDK alone would remove 3,513 files for a project that only uses S3.</td></tr>
+  <tr><td>Readiness does not check dependencies</td>
+      <td>The probe is an HTTP check on <code>/fpm-status</code> (§8), so it proves nginx and PHP-FPM
+          are up and talking — but not that MySQL or Redis are reachable. That is a deliberate
+          trade-off: making readiness depend on the database means one slow query marks every pod
+          unready at once, converting a degradation into a full outage. The better answer is a
+          dedicated health endpoint that reports dependency state without all pods failing in
+          lockstep.</td></tr>
+  <tr><td>Host-bound performance</td>
+      <td>k3d runs every node as a container on one machine, so a heavy load test starves the same
+          control plane trying to schedule new pods. Absolute latency numbers here reflect the
+          laptop, not the architecture.</td></tr>
+</table>
+
+<h3>Repository map</h3>
+<pre><code>manifests/           Kubernetes resources + WordPress image build
+  wordpress.yaml       Deployment (nginx+PHP-FPM container + exporter), Service, Ingress, HPA
+  wordpress-config.yaml  wp-config.php and nginx vhost ConfigMaps
+  wordpress.Dockerfile Custom image: phpredis, wp-cli, plugins, nginx
+  fpm-autotune.sh      Derives pm.max_children from the container memory limit
+  start-services.sh    Runs nginx + PHP-FPM, exits if either dies
+  mu-plugins/          wc-redis-sessions.php  (cart/session store -> Redis)
+                       s3-uploads-minio.php   (media -> MinIO)
+  monitoring/          ServiceMonitor, recording rule, custom-metric HPA
+configs/
+  k6/tests/            Load profiles (steady-state and scale-out)
+  grafana/             Prometheus and Prometheus Adapter values
+scripts/
+  bootstrap.sh         Zero to running stack
+  install-plugins.sh   Image build, WordPress install, plugin activation
+dashboard/
+  server/              Express + WebSocket backend streaming k6 and cluster state
+  web/                 React + Recharts frontend</code></pre>
+
+</body>
+</html>
